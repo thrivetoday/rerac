@@ -1,0 +1,12 @@
+[package]
+name = "rc-map"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "RAC Maker custom maps: the map file, and what it turns into on its host level (gameplay sections, collision)."
+
+# No Bevy and no external crates (docs/plan/decisions.md): the engine and, later, the editor share it.
+[dependencies]
+rc-formats = { path = "../rc-formats" }
+bytemuck.workspace = true

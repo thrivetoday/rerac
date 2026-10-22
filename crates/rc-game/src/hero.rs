@@ -493,6 +493,19 @@ pub struct Hero {
     pub cheats: crate::cheats::Cheats,
     /// The move ring 0x141514[16] / 0x141524 of the cheat entry `0x2285a0` (`crate::cheats::MoveEntry`).
     pub cheat_moves: crate::cheats::MoveEntry,
+    /// A custom map's switches over the level-number rules ([`Abilities`]). Not part of the game's hero block.
+    pub abilities: Abilities,
+}
+
+/// The ability profile of a custom map (RAC Maker, docs/plan/rac_maker.md): switches that replace the hero code's
+/// level-number rules, which follow the overlay each level compiled. `None` (the default) keeps the level's own rule,
+/// so the game's levels are unchanged.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Abilities {
+    /// The rail contact ([`boots::RAIL_LEVELS`]).
+    pub rails: Option<bool>,
+    /// The cable contact ([`boots::CABLE_LEVELS`]).
+    pub cables: Option<bool>,
 }
 
 /// Item ownership as the hero code reads it: the game state's owned table `0x13d4c0 + id` (37 items,
@@ -561,6 +574,7 @@ impl Hero {
             f13f5: 0, f13ff: 0, weapons: weapons::Weapons::default(), comet: comet::Comet::default(), loop_in: Default::default(),
             joint_targets: Default::default(), help: Default::default(), walloper: Default::default(), bodies: bodies::Bodies::default(), glow: glow::HeroGlow::default(), env_base: None,
             cheats: Default::default(), cheat_moves: Default::default(), board: hoverboard::Board::default(),
+            abilities: Abilities::default(),
         }
     }
 

@@ -277,8 +277,9 @@ pub(super) fn contacts(h: &mut Hero, env: &Env) {
     if h.f0637 != 0 && (h.f65c == 0 || h.height < Pf::b(0x3e99_999a)) && h.mode == 0 && h.magneboots_on() { h.f658 = 1; }
     let level = h.idle.level;
     let paths = paths(env);
-    if RAIL_LEVELS.contains(&level) { rail_contact_probe(h, paths, level); }
-    if CABLE_LEVELS.contains(&level) { cable_contact_probe(h, env, paths); }
+    // A custom map's ability profile overrides the overlay's (the level number's) rule.
+    if h.abilities.rails.unwrap_or(RAIL_LEVELS.contains(&level)) { rail_contact_probe(h, paths, level); }
+    if h.abilities.cables.unwrap_or(CABLE_LEVELS.contains(&level)) { cable_contact_probe(h, env, paths); }
 }
 
 fn rail_contact_probe(h: &mut Hero, paths: &[GrindPath], level: i32) {
