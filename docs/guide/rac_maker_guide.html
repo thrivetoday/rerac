@@ -63,9 +63,11 @@
   <h2>Start here</h2>
   <p>The editor is the game itself, paused. What you see is exactly what you will play.</p>
   <ul>
-    <li>The <b>left panel</b> has three tabs: <span class="chip">Objects</span> to place things, <span class="chip">Terrain</span> to build ground, <span class="chip">Maps</span> for your files and backups.</li>
-    <li>The <b>right panel</b> shows what is selected: an object, a terrain patch, or (with nothing selected) the map's own settings: start point, loadout, floors.</li>
-    <li>The <b>top bar</b>: New, Save, Undo, Redo, and <b>Play</b> (<kbd>F5</kbd>). The help panel opens with <b>Help</b>.</li>
+    <li>The <b>tool strip</b> (the left edge) holds every tool, keys <kbd>1</kbd> to <kbd>0</kbd>: <span class="chip">Select</span> <span class="chip">Objects</span> <span class="chip">Islands</span> <span class="chip">Shape</span> <span class="chip">Edges</span> <span class="chip">Sculpt</span> <span class="chip">Paths</span> <span class="chip">Rails</span> <span class="chip">Logic</span> <span class="chip">World</span>.</li>
+    <li>The <b>left panel</b> shows the tool's own things under its name: the objects to place, the brushes, the zone kinds, the sky. <span class="chip">Select</span> shows the controls and <b>On this map</b>, a list of everything on the map by kind.</li>
+    <li>The <b>right panel</b> shows whatever is selected, in any tool: an object, an island, a path, a rail, a zone, a lamp. With nothing selected it shows the <b>map</b>: start, death height, ship, loadout, floors. The <b>Map</b> chip at its top (or <kbd>Esc</kbd>) goes back there; the bin deletes the selection.</li>
+    <li>The <b>top bar</b>: New, Save, Undo, Redo, <b>Play</b> (<kbd>F5</kbd>), the map's picture and the collision view; on the right the radio, the views (the eye), the fly speed and the help (<kbd>F1</kbd>).</li>
+    <li>The <b>bottom bar</b> shows what the mouse buttons and keys do in the tool you hold.</li>
   </ul>
   <div class="tip">Every change appears straight away and reloads the level in the background in about half a second, so what you build is always playable.</div>
 </section>
@@ -74,7 +76,7 @@
   <ul>
     <li>Hold the <b>right mouse button</b> and move the mouse to look around.</li>
     <li><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly, <kbd>Space</kbd> up, <kbd>Q</kbd> down. Hold <kbd>Shift</kbd> to go five times faster.</li>
-    <li>The <b>mouse wheel</b> (over the world, not a panel) changes the flying speed. The top bar shows the speed; click <b>⟲</b> next to it to reset it.</li>
+    <li>The <b>mouse wheel</b> (over the world, not a panel) changes the flying speed. The top bar shows the speed; click it to put it back to 16.</li>
   </ul>
   <div class="tip">If the camera ever feels slow, you scrolled the wheel down over the world. Scroll up or press the reset.</div>
 </section>
@@ -86,7 +88,7 @@
     <li>Press <kbd>R</kbd> (or <kbd>Shift</kbd>+<kbd>R</kbd>) while placing to turn it first. <kbd>Esc</kbd> stops placing.</li>
     <li>Select an object to see it on the right: position, facing, and <b>Add another</b> on top, left, right, in front or behind, which is great for rows and stacks of crates.</li>
     <li>Crates that touch are linked automatically: break the bottom crate and the ones above fall, as in the game.</li>
-    <li><b>Solid</b> (on the right) builds collision from an object's shape. Many pieces had no collision of their own in the game (the planet around them was solid), so walls, rocks and other scenery get it automatically. Leave it off for things that move or break: the collision stays where you put it.</li>
+    <li><b>Solid</b> (on the right) builds collision from an object's shape. Many pieces had no collision of their own in the game (the planet around them was solid), so walls, rocks and other scenery get it automatically. Leave it off for things that move or break: the collision stays where you put it. An object with collision of its own says <b>Solid by itself</b>; its <b>Extra solid from its model</b> adds collision from its whole shape on top, which stays where it stands even if the object moves or breaks.</li>
     <li>A <b>red line</b> from an object means the game moves it somewhere else when the level loads, using data from its home planet. Such objects cannot stay where you put them yet.</li>
   </ul>
   <div class="warn">Some objects follow paths, trigger boxes or cameras from their home planet. Until paths come to the editor they may stand still or move strangely.</div>
@@ -102,9 +104,11 @@
 <section id="terrain">
   <h2>Terrain</h2>
   <ul>
-    <li>The <b>toolbar</b> over the world holds every tool: <b>Select</b>, <b>Place</b>, <b>Build</b>, <b>Shape</b>, <b>Openings</b>, <b>Sculpt</b> and <b>Paths</b>. <kbd>Esc</kbd> puts down whatever you hold and comes back to Select. With Select, click an island, a path or an object: its settings show on the right.</li>
+    <li>The terrain tools are in the tool strip: <b>Islands</b> (build), <b>Shape</b>, <b>Edges</b> (openings), <b>Sculpt</b>, <b>Paths</b> and <b>Rails</b>. <kbd>Esc</kbd> puts down whatever you hold, lets go of the selection, then comes back to Select. Click an island, a path or a rail to see its settings on the right: ground, colour, edge, surface, size and place, roof.</li>
+    <li>Texture and plant grids show one planet at a time: step through the planets with the arrows by its globe.</li>
     <li>A new map starts on a big flat patch of grass: it is terrain like any other, so you can sculpt it, reshape it or delete it.</li>
-    <li><span class="chip">Build islands</span>: choose a <b>shape</b> (Round, Square or Blob), how far <b>across</b>, its <b>height above the ground</b> and its <b>cliff depth</b> (walls down from the edge, closed underneath). A <b>green outline</b> follows the mouse and shows exactly where the island will go: its top, its cliffs and the spot on the ground below. Click to build it, on the ground or out in the air.</li>
+    <li><span class="chip">Build islands</span>: choose a <b>shape</b> (Round, Square, Blob or Draw), how far <b>across</b>, its <b>height above the ground</b> and its <b>cliff depth</b> (walls down from the edge, closed underneath). A <b>green outline</b> follows the mouse and shows exactly where the island will go: its top, its cliffs and the spot on the ground below. Click to build it, on the ground or out in the air. <b>Drag</b> instead of clicking to pull the island out from where you press to the size you want.</li>
+    <li><b>Draw</b> (the fourth shape): hold the left mouse button and <b>trace the coast</b> in the world, then let go. The island gets exactly the shape you drew, at the height above the ground you set.</li>
     <li>The texture under <b>New island's ground</b> is for the <i>next</i> island you build. To change an island that is already there, select it: its own texture is in the right panel.</li>
     <li><b>Edge</b>: pick from <b>Railings</b> (the Aridia truss railing, the Kerwan iron fence, the Pokitaru railing and more, shown as pictures) or <b>Walls</b> (stone, rock, metal and concrete walls from the game, or a <b>Textured wall</b> of any height up to 30 with the texture you choose). It is laid all the way round the island's coast. <b>Invisible wall</b> blocks without anything drawn. <b>Blocks up to</b> sets how high Ratchet cannot get past it. Right after you build an island, changing the edge, texture or cliff depth in Build islands also changes that island; for any island, select it and use the right panel.</li>
     <li><span class="chip">Openings</span>: click an island, then click a stretch of its edge to take it out (it turns red): a gap to walk through or jump from. Click a red opening to put the edge back, or hold the button and run along the edge to do many at once. Openings stay where you put them when the coast moves; <b>Close all</b> puts the whole edge back. The <b>Edge gaps</b> brush in Sculpt takes railing out (or, with <kbd>Shift</kbd>, puts it back) wherever you brush. Ratchet stops on the land side of a railing, and walks through every opening you see.</li>
@@ -112,7 +116,7 @@
     <li><span class="chip">Paths</span>: walkways and bridges. Click where a path starts, then where it bends, and press <kbd>Enter</kbd> when done. Click from one island to another and it is a bridge across the air; the railings it crosses open by themselves (close them again in Openings). Drag a point to move it, turn the <b>mouse wheel</b> over a point to raise or lower it, <kbd>Delete</kbd> over a point removes it. Each path has a width, a thickness, a texture, a surface and an edge (railings or walls on both sides).</li>
     <li><b>Shade</b> brush (Sculpt): tints the ground with a colour (shadow, dark, warm, moss, burnt, snow or any colour you pick): shadows under trees, scorched or mossy patches. With <kbd>Shift</kbd> it clears the tint.</li>
     <li><b>Decor</b> brush (Sculpt): pick a plant, rock or detail of the planet (Objects &gt; Planet chooses which) and drag to strew it over the land, each turned and sized a little differently. With <kbd>Shift</kbd> it picks them up. They stay on the ground when you sculpt or move the island.</li>
-    <li><b>Collision</b> (top bar, or <kbd>F6</kbd>, also while playing): shows what Ratchet stands on and bumps into near the camera: green ground, blue slippery, orange hot, red deadly, purple magnetic, grey cliffs, yellow edges. When you save, the editor checks the map and lists what it found in the <span class="chip">Maps</span> tab: holes in the collision, a start over nothing, ground below the death height.</li>
+    <li><b>Collision</b> (top bar, or <kbd>F6</kbd>, also while playing): shows what Ratchet stands on and bumps into near the camera: green ground, blue slippery, orange hot, red deadly, purple magnetic, grey cliffs, yellow edges. When you save, the editor checks the map; a warning sign next to Save lists what it found: holes in the collision, a start over nothing, ground below the death height.</li>
     <li><b>Roof</b> (right panel): a flat textured plane over the island's land at the height you choose, seen from above and below. Ratchet can stand on it. A tall textured wall with a roof makes a room or a cave.</li>
     <li><span class="chip">Shape</span>: click an island to select it. White dots appear along its coast: <b>drag a dot out</b> to grow the land that way, <b>drag it in</b> to cut a bay. The yellow circle is the dot's <b>reach</b>, how much coast follows it: turn the <b>mouse wheel</b> over a dot to change it (small for a sharp point, big for a whole side). The island's grid grows by itself when you pull past it.</li>
     <li>In Shape, the <b>green diamond</b> in the middle moves the whole island and the <b>blue arrow</b> raises or lowers it. <b>Grow all</b> and <b>Shrink all</b> move the whole coast by a unit. Hold <kbd>Ctrl</kbd> to snap to the grid. Each drag is one <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</li>
@@ -132,7 +136,7 @@
 <section id="logic">
   <h2>Logic: zones &amp; rules</h2>
   <ul>
-    <li>The <span class="chip">Logic</span> tab places <b>zones</b>: boxes in the world that do something when Ratchet walks into them. Pick a kind, then click in the world. Click a zone to select it and drag it to move it; on the right set its name, <b>width</b>, <b>length</b>, <b>height</b>, <b>turn</b> and where its bottom is.</li>
+    <li>The <span class="chip">Logic</span> tool places <b>zones</b>: boxes in the world that do something when Ratchet walks into them. Pick a kind, then click in the world. Click a zone to select it and drag it to move it; on the right set its name, <b>width</b>, <b>length</b>, <b>height</b>, <b>turn</b> and where its bottom is.</li>
     <li><b>Checkpoint</b> (blue): when Ratchet walks in, the game saves his place. After a death he comes back there.</li>
     <li><b>Goal</b> (yellow): walking in finishes the map. A banner shows your time, the jingle plays, and a few seconds later you are back in the editor.</li>
     <li><b>Death zone</b> (red): walking in costs a life. Use it for pits, lava or anything the death height does not cover.</li>
@@ -153,14 +157,20 @@
     <li><b>Robot troopers</b> and the <b>Veldin tank</b> take a <b>path</b> (right panel): <b>Square patrol</b> or <b>8 ahead</b>, then drag the points in the world. Troopers patrol it; the tank drives from point to point in a random order. A trooper without a path guards where it stands.</li>
     <li>Enemies bring what they need from their planet: their guns, shots, treads and riders, their patrol areas and trigger boxes, turned and moved with them. A few still need companions or their planet's script and are marked <b>may vanish on maps</b>; set pieces (bosses, races, space fights) cannot be placed.</li>
     <li>Enemies marked <b>may vanish on maps</b> in the object list still lean on their home planet's data: they can disappear or wander off. Try them with Play before building around them.</li>
+    <li>The objects are sorted into <b>categories</b>: Enemies, Bosses, Creatures, Characters, Machines (the vendor, teleporters, kiosks), Crates, Pickups, Gadget points, Platforms &amp; lifts, Doors &amp; gates, Switches &amp; triggers, Hazards, Breakables, Vehicles, Scenery and Effects. The search finds names, categories and moby ids. Pieces, shots and parts the game makes itself are left out.</li>
+    <li><b>Breakables</b> holds only what Ratchet can break; its panel says what breaks it (any hit, or explosions only). Walls only a boss, a story shot or Giant Clank breaks are with the scenery, and say so.</li>
+    <li>An object's panel shows its category and its file (for example <i>rac1/L01/moby/729</i>). Amber notes say what it needs on a map: its partner (a switch, a crank), its planet's route, a group, or that it is a story object.</li>
+    <li><b>Breakables</b> have <b>Hides</b>: put a gold bolt or a crate behind one, hidden until it breaks (a rule in Logic does it).</li>
+    <li>Objects that move, break or have their own collision are never baked solid, so a wall you blow up is gone, collision and all. Each gold bolt on a map is its own (collecting one no longer takes the others).</li>
     <li><b>Ammo crates</b> refill the weapons Ratchet owns: tick a weapon under <b>Loadout</b> in the map settings, or the crate gives nothing (saving warns about it). Bolt and Nanotech crates always work.</li>
   </ul>
 </section>
 <section id="world">
   <h2>World: sky, song, ship</h2>
   <ul>
-    <li>The <span class="chip">World</span> tab sets the <b>sky and light</b>: pick another planet and the map gets its sky, background colour and fog. <b>Own fog</b> sets a fog colour, where it starts and where it is full.</li>
+    <li>The <span class="chip">World</span> tool sets the <b>sky and light</b>: pick another planet and the map gets its sky, background colour and fog. <b>Own fog</b> sets a fog colour, where it starts and where it is full.</li>
     <li><b>Raise</b> and <b>turn</b> (under the sky tiles) move the sky up or down and spin it round.</li>
+    <li><b>Planet</b>: the planet Ratchet's ship flies to when you press Play, as the game flies between its planets; your map's name shows under it. Start from a look (Lush, Desert, Ice, Lava, Gas giant, Toxic), then pick its pattern (land &amp; sea, bands, craters, swirls), its three colours, the glow of its air, clouds and a ring. <b>New world</b> gives another layout of land and sea. Untick <b>Fly here on Play</b> to start playing at once.</li>
     <li><b>Themes</b>: a whole look in one click (sky, fog, light, colours and song): Toxic, Frozen, Volcanic, Night City, Desert Noon, Alien Dusk and Ruins. Change any part after.</li>
     <li><b>Light</b>: your own sun (its direction, height and colour), the ambient (the light in the shade) and <b>shade hollows</b> (dips and the feet of slopes darker) for your islands, paths and pieces. The game's objects keep their own light.</li>
     <li><b>Colours</b>: shift the whole map's hue, saturation and brightness and mix in a tint. <b>Objects too</b> also recolours the enemies, crates, pickups and Ratchet; leave it off to keep them easy to see.</li>
@@ -170,17 +180,18 @@
     <li><b>Sky layers</b> (under the sky tiles): a sky is drawn in layers (a dome, clouds, a sun, mountains); hide or tint each.</li>
     <li>An object's panel has <b>Tint</b>: one object coloured on its own.</li>
     <li>An island's or a path's panel has <b>Colour</b>: <b>Tint this island</b> (or path) colours just it; <b>Its texture's colours, everywhere</b> shifts its texture on every island and path that uses it.</li>
-    <li>Changes in the World tab show at once (light, colours, lights, fog). The sky and the objects' colours change when you let go of the slider.</li>
+    <li>Changes in the World tool show at once (light, colours, lights, fog). The sky and the objects' colours change when you let go of the slider.</li>
     <li>Some skies move on their own: twinkling and <b>shooting stars</b> (Veldin, Aridia, Gemlik Base, Blarg Station, Drek's Fleet and others) and cloud layers that slowly turn. Under the sky tiles, <b>Stars and shooting stars</b> and <b>Clouds drift</b> switch them off.</li>
     <li>Saving warns when <b>Objects too</b> shifts the enemies' and pickups' colours hard, or when the fog is so thick that things disappear in it.</li>
     <li><b>Song</b>: <b>Use</b> picks what the map plays (any planet's themes; the host's song or <b>Silence</b> also work). Press <b>▶</b> next to a song to listen while you edit (the radio) and <b>■</b> to stop it.</li>
-    <li><b>Ratchet's ship</b> (map settings: the right panel with nothing selected): the level starts with the ship flying in and landing, as on the game's planets. The ship is locked until the goal is reached ("Back to your ship!"); then walk to its hatch and press <kbd>△</kbd> to board, fly off and finish ("Level complete"). With a ship, Ratchet starts by its hatch (the blue circle follows the ship): make sure there is ground there and a way to the ship.</li>
+    <li><b>Ratchet's ship</b> (map settings, Start: <b>Ship</b>): the level starts with the ship flying in and landing, as on the game's planets. The ship is locked until the goal is reached ("Back to your ship!"); then walk to its hatch and press <kbd>△</kbd> to board, fly off and finish ("Level complete"). With a ship, Ratchet starts by its hatch (the blue circle follows the ship): make sure there is ground there and a way to the ship.</li>
   </ul>
 </section>
 <section id="play">
   <h2>Playing your map</h2>
   <ul>
     <li>Press <b>Play</b> or <kbd>F5</kbd>. Ratchet starts at the start point (the blue circle), with the loadout you ticked in the map settings.</li>
+    <li>Play first flies Ratchet's ship through space to your planet (World &gt; Planet), shows its name, then lands (with a ship) or starts at once. Any button skips the flight.</li>
     <li>Press <kbd>F5</kbd> again to stop. Everything you broke or killed comes back, and the camera returns to where you were.</li>
     <li>Set the start point, death height, rails and loadout in the right panel with nothing selected.</li>
     <li>Reaching a <b>Goal</b> zone shows your time; a few seconds later you are back in the editor.</li>
@@ -190,14 +201,17 @@
   <h2>Maps, saving &amp; backups</h2>
   <ul>
     <li><kbd>Ctrl</kbd>+<kbd>S</kbd> saves. A dot after the map's name means unsaved changes.</li>
-    <li><b>New</b> starts a fresh map in your maps folder (<i>Documents\RAC Maker</i>).</li>
-    <li>The <span class="chip">Maps</span> tab lists your recent maps and every map in the folder: click one to open it.</li>
-    <li>Every save keeps a backup of the version it replaces, and unsaved work is backed up every 5 minutes. <b>Restore</b> any backup from the Maps tab.</li>
+    <li><b>New</b> starts a fresh map in your maps folder (<i>RAC Maker</i> in your Documents folder; maps made before in <i>C:\Users\you\Documents\RAC Maker</i> stay there).</li>
+    <li><b>Recent</b> (main menu, left) lists the maps you opened last, also ones outside the maps folder.</li>
+    <li><b>Share</b> (main menu, with a map picked) saves it as one <i>.racmap</i> file with its picture, in the maps folder's <i>Shared</i> folder, and shows it in Explorer: send that file. A map holds only your work and references to the game's parts, so the other player needs their own extracted game, as for ReRAC.</li>
+    <li><b>Import…</b> (main menu, next to Your maps) lists the shared maps in your Downloads and on your Desktop; <b>Browse…</b> picks any file in Windows' file window. The <b>ReRAC Launcher</b>'s RAC Maker tile also imports, plays and edits maps.</li>
+    <li>The main menu lists every map in the folder: click one to open it.</li>
+    <li>Every save keeps a backup of the version it replaces, and unsaved work is backed up every 5 minutes. Open any backup from the main menu (click the map).</li>
     <li>Drag a card in the main menu to put your maps in the order you like.</li>
     <li>The <b>main menu</b> opens when the editor starts (and from <b>RAC MAKER · Menu</b> at the top left). It shows every map in your folder as a card with its picture. Click a card for <b>Load</b>, <b>Play</b>, <b>Duplicate</b>, <b>Rename</b> and <b>Delete</b> (deleted maps go to the <i>Deleted</i> folder), its named <b>versions</b> and its <b>backups</b>. Double-click a card to load it.</li>
     <li><b>Save version</b> (main menu, on the open map) keeps a named copy that is never pruned, unlike backups.</li>
-    <li><b>Set thumbnail</b> (top bar): fly the camera to the view you like and press it. The game view, without the panels, becomes the map's picture in the main menu.</li>
-    <li><b>+ picture</b> (next to Save, on by default): every save takes the picture again from the spot where you pressed Set thumbnail, so it shows your latest edits. Maps made before this need Set thumbnail pressed once.</li>
+    <li>The <b>camera button</b> (top bar): fly the camera to the view you like and press it. The game view, without the panels, becomes the map's picture in the main menu.</li>
+    <li>The <b>circle arrow</b> next to it (on by default): every save takes the picture again from that spot, so it shows your latest edits. Maps made before this need the camera button pressed once.</li>
   </ul>
 </section>
 <section id="keys">
@@ -205,13 +219,15 @@
   <table>
     <tr><td>Right mouse + move</td><td>Look around</td></tr>
     <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Space</kbd> <kbd>Q</kbd></td><td>Fly (Shift: faster; wheel: speed)</td></tr>
-    <tr><td>Left click</td><td>Select, place, or sculpt (Terrain tab)</td></tr>
+    <tr><td><kbd>1</kbd> … <kbd>0</kbd></td><td>The tools in the strip</td></tr>
+    <tr><td>Left click</td><td>Select, place, build or brush (the tool's)</td></tr>
     <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Turn the object (also while placing)</td></tr>
-    <tr><td><kbd>Delete</kbd></td><td>Remove the selected object</td></tr>
-    <tr><td><kbd>Esc</kbd></td><td>Stop placing</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Delete what is selected</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Stop placing, let go of the selection, back to Select</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td></tr>
     <tr><td><kbd>F5</kbd></td><td>Play / stop</td></tr>
+    <tr><td><kbd>F6</kbd> / <kbd>F1</kbd></td><td>Collision view / help</td></tr>
   </table>
 </section>
 </main>

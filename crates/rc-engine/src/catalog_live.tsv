@@ -1,0 +1,583 @@
+# The spawn test's verdicts (rerac --spawn-test on the NTSC-U disc), merged into a catalog built without them:
+# asset id, live | needs-work, what it saw.
+rac1/L00/moby/11	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L00/moby/13	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/14	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L00/moby/270	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L00/moby/500	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/501	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/511	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/530	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/639	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L00/moby/749	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/750	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L00/moby/834	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/1060	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/1143	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L00/moby/1290	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L00/moby/1440	live	ran 1 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/1564	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/1781	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L00/moby/1782	live	ran 601 updates on a test map (Veldin host) with no unported call
+rac1/L01/moby/280	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/304	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/459	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/502	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/505	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/572	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/577	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/604	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/641	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/660	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/665	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/666	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/688	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/695	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/701	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/703	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/704	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/705	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/709	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/710	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/711	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/715	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/724	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/725	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/726	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/729	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/730	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/746	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/754	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/768	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/769	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/774	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/778	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/790	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/815	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/865	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/866	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1042	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1134	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1135	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1456	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1457	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1458	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1459	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1460	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1461	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1462	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1463	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1464	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1465	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1813	live	ran 601 updates on a test map (Novalis host) with no unported call
+rac1/L01/moby/1818	live	ran 1 updates on a test map (Novalis host) with no unported call
+rac1/L02/moby/331	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/580	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/612	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/615	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/651	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/652	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/653	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/656	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/668	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/675	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/690	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/707	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/713	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/732	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/733	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/734	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/735	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/736	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/743	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/744	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/758	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/762	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/766	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/767	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/786	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/788	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/789	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/792	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/803	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/1005	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/1212	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/1213	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L02/moby/1819	live	ran 601 updates on a test map (Aridia host) with no unported call
+rac1/L03/moby/75	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/115	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/116	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/117	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/118	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/119	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/120	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/132	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/455	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/573	live	ran 2 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/574	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/578	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/631	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/795	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/816	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/817	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/822	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/825	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/868	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/890	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/905	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/909	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/914	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/915	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/916	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/917	live	ran 1 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/920	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L03/moby/928	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/997	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/1012	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/1210	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L03/moby/1827	live	ran 601 updates on a test map (Kerwan host) with no unported call
+rac1/L04/moby/217	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/340	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/427	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/432	live	ran 1 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/434	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/466	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/480	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/481	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/484	live	ran 1 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/485	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/486	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/488	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/490	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/493	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/494	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/495	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/498	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/555	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/563	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/584	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/642	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1101	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1102	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1120	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1190	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1531	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1532	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L04/moby/1834	live	ran 601 updates on a test map (Eudora host) with no unported call
+rac1/L05/moby/35	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/79	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/133	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/341	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/439	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/623	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/625	live	ran 1 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/717	live	ran 1 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/810	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/812	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/823	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/830	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/831	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/838	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/843	live	ran 1 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/844	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/846	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/852	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/853	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/855	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/877	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/893	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/895	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/918	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/919	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/925	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/982	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/984	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/998	live	ran 1 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/1099	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/1139	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/1140	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L05/moby/1511	live	ran 601 updates on a test map (Rilgar host) with no unported call
+rac1/L06/moby/55	live	ran 2 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/367	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/827	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/857	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/911	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1016	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1021	live	ran 4801 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1028	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1035	live	ran 4 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1038	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1048	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1051	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1054	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1061	live	ran 1 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1066	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1068	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1083	needs-work	the test map crashed or did not load (log: spawn-test/log_0003.txt)
+rac1/L06/moby/1091	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1092	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1093	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1094	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1095	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1096	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1097	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1098	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1103	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1105	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1109	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1118	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1123	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1302	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1655	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1660	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1664	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L06/moby/1672	live	ran 601 updates on a test map (Blarg Station host) with no unported call
+rac1/L07/moby/38	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/447	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/529	live	ran 1 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/871	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/886	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/941	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/943	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/944	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/948	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/949	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/950	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/951	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/952	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/953	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/954	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/955	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/958	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/961	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/962	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/967	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/968	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/969	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/970	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/971	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1013	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1014	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1041	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1059	live	ran 2 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1063	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1064	live	ran 1123 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1065	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1069	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1078	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1079	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1080	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1104	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1106	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1110	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1112	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1113	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1114	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1115	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1116	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1126	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1128	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1129	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1131	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1133	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1474	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1650	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1663	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L07/moby/1686	live	ran 601 updates on a test map (Umbris host) with no unported call
+rac1/L08/moby/252	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/253	live	ran 1 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/333	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/424	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/435	live	ran 688 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/438	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/440	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/444	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/452	live	ran 1 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/462	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/463	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/467	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/468	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/469	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/472	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/492	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/547	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/548	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/549	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/550	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/551	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/588	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/589	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/590	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/591	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/592	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/593	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/594	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/595	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/596	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/597	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/598	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/621	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/1023	live	ran 599 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/1130	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/1144	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/1283	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L08/moby/1844	live	ran 601 updates on a test map (Batalia host) with no unported call
+rac1/L09/moby/52	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/193	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/265	live	ran 12510 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/276	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/664	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1150	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1151	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1172	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1181	needs-work	reached unported code: 1181 chain link: no next link (the game's debug print) (1×); 1181 chain link: no previous link (the game's debug print) (1×)
+rac1/L09/moby/1182	needs-work	reached unported code: 1182..1189 platform piece: no 1184 within 20 (the game's debug print) (1×)
+rac1/L09/moby/1183	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1184	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1185	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1186	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1187	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1188	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1189	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1201	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1206	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1285	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1320	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1766	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1849	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L09/moby/1885	live	ran 601 updates on a test map (Gaspar host) with no unported call
+rac1/L10/moby/18	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/351	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/353	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/794	live	ran 33 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/939	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1015	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1031	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1033	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1047	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1067	live	ran 1 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1100	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1117	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1141	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1196	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1199	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1202	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1229	live	ran 1 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1282	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1301	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1326	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1346	live	ran 1 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1378	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1421	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1424	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1855	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1856	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L10/moby/1973	live	ran 601 updates on a test map (Orxon host) with no unported call
+rac1/L11/moby/23	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/65	live	ran 1201 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/90	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/114	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/298	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/318	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1075	live	ran 1 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1156	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1157	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1158	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1159	live	ran 1199 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1178	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1179	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1180	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1231	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1242	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1246	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1248	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1264	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1319	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L11/moby/1859	live	ran 601 updates on a test map (Pokitaru host) with no unported call
+rac1/L12/moby/19	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/238	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/240	live	ran 3 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/282	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/294	live	ran 2 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/296	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/326	live	ran 1 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/328	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/336	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/339	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/384	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1259	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1267	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1269	live	ran 119 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1274	live	ran 1 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1278	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1280	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1281	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1345	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L12/moby/1862	live	ran 601 updates on a test map (Hoven host) with no unported call
+rac1/L13/moby/21	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/29	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/63	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/69	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/101	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/104	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/106	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/111	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/127	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/128	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/129	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/130	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/159	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/169	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/170	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/182	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/183	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/212	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/224	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/228	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/231	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/244	live	ran 243 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/360	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/388	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/404	live	ran 23 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/405	live	ran 23 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/674	live	ran 1 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/677	live	ran 1 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/680	live	ran 1 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1261	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1262	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1263	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1270	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1393	live	ran 2 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1577	live	ran 2 updates on a test map (Gemlik Base host) with no unported call
+rac1/L13/moby/1805	live	ran 601 updates on a test map (Gemlik Base host) with no unported call
+rac1/L14/moby/8	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/28	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/30	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/31	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/211	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/250	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/309	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/557	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/643	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/685	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/765	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/851	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/903	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/908	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/921	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/922	live	ran 1 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/923	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/924	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/933	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L14/moby/1354	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/1395	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/1397	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/1416	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L14/moby/1417	live	ran 601 updates on a test map (Oltanis host) with no unported call
+rac1/L15/moby/44	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/67	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/77	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/78	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/92	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/93	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/123	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/148	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/154	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/196	live	ran 1 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/197	live	ran 1 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/221	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/233	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/255	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/283	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/408	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/491	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/655	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/937	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1209	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1250	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1388	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1408	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1409	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1428	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L15/moby/1430	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1446	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1451	live	ran 1 updates on a test map (Quartu host) with no unported call
+rac1/L15/moby/1567	live	ran 601 updates on a test map (Quartu host) with no unported call
+rac1/L16/moby/257	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/470	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/471	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/482	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/541	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/546	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/552	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/556	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/638	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/647	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/650	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/654	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/800	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1356	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1377	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1387	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1401	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1410	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1439	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1441	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1442	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1443	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1445	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1455	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1667	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1668	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1669	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1670	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1671	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1826	live	ran 1 updates on a test map (Kalebo III host) with no unported call
+rac1/L16/moby/1891	live	ran 601 updates on a test map (Kalebo III host) with no unported call
+rac1/L17/moby/99	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/347	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/669	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/835	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1359	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1360	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1361	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1362	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1363	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1364	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1367	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1369	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1372	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1373	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1379	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1380	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1382	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1405	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1406	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1407	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1426	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1448	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1873	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1876	live	ran 601 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L17/moby/1958	live	ran 1 updates on a test map (Drek's Fleet host) with no unported call
+rac1/L18/moby/568	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/583	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/587	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/885	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/888	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/891	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/892	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/894	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/900	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/901	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/936	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1355	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1392	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1422	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1432	live	ran 1 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1434	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1435	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1454	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1584	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1890	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1899	live	ran 1 updates on a test map (Veldin (finale) host) with no unported call
+rac1/L18/moby/1906	live	ran 601 updates on a test map (Veldin (finale) host) with no unported call

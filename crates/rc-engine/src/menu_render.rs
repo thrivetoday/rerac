@@ -1607,6 +1607,7 @@ fn build_prims(
     // The pages stay clipped to the 512×416 screen in a 16:9 frame (`Prim::boxed`): their unused panels lie off it.
     for p in h.prims.iter_mut().chain(statics.iter_mut().flatten()) { p.boxed = true; }
     hook.prims = h.prims;
+    hook.texts.clear();
     hook.statics = statics;
     hook.replace_hud = matches!(rt.render_mode, Mode::Menu | Mode::Slideshow) || menu_under_freeze(&rt);
     // The vendor (mode 5) runs `HudUpdate(1)` every frame: the HUD ticks and draws over its screens.

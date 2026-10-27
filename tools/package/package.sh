@@ -3,6 +3,8 @@
 #
 #   tools/package/package.sh              release build of `rerac` + `rerac-extract`, then package
 #   tools/package/package.sh --no-build   package the binaries already in target/release
+#   PACKAGE_LABEL="RAC Maker" tools/package/package.sh   a labelled build: "0.3.6 + RAC Maker" in the manifest,
+#                                          rerac-0.3.6-rac-maker-<os>-<arch> as the folder and zip name
 #
 # Output: dist/rerac-<version>-<os>-<arch>/ and dist/rerac-<version>-<os>-<arch>.zip, holding
 #   rerac[.exe]              the runtime (crate rc-engine; plain release build, never `--features dev`)
@@ -45,7 +47,15 @@ case "$(uname -m)" in
   *) arch="$(uname -m)" ;;
 esac
 
-name="rerac-$version-$os-$arch"
+label="${PACKAGE_LABEL:-}"
+base_version="$version"
+if [ -n "$label" ]; then
+  slug="$(printf '%s' "$label" | tr 'A-Z' 'a-z' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')"
+  name="rerac-$version-$slug-$os-$arch"
+  version="$version + $label"
+else
+  name="rerac-$version-$os-$arch"
+fi
 target="${CARGO_TARGET_DIR:-$repo/target}/release"
 dist="$repo/dist"
 out="$dist/$name"
@@ -104,7 +114,9 @@ fi
 
 # The packaged runtime must answer the contract line with this version.
 got="$("$out/rerac$exe" --version-json)"
-want="{\"name\":\"rerac\",\"version\":\"$version\",\"game\":\"rac1\",\"data_format\":1}"
+# The runtime reports the plain workspace version (a label is the manifest's only) and the map format it reads.
+maker_format="$(awk '/^pub const MAKER_FORMAT: i64 = / { gsub(/^pub const MAKER_FORMAT: i64 = |;$/, ""); print; exit }' crates/rc-map/src/lib.rs)"
+want="{\"name\":\"rerac\",\"version\":\"$base_version\",\"game\":\"rac1\",\"data_format\":1,\"maker_format\":$maker_format}"
 [ "$got" = "$want" ] || { echo "rerac --version-json: got $got, want $want" >&2; exit 1; }
 
 case "$os" in

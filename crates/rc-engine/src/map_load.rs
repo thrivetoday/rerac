@@ -160,6 +160,11 @@ pub fn patch_gameplay(root: &Path, def: &MapDef, host: &[u8]) -> Result<Vec<u8>>
         splines.push(path.iter().map(|q| [q[0], q[1], q[2], 0.0]).collect());
         path_pvars(&mut records[i + 1], index, o.time);
     }
+    // Gold bolts: each its own slot of the level's four (pvar +0x00, its collected byte): copies of one template
+    // would share it (collect one, all go).
+    for (k, i) in def.objects.iter().enumerate().filter(|(_, o)| o.asset.number == 1134).map(|(i, _)| i).enumerate() {
+        if let Some(w) = records[i + 1].pvar.as_mut().and_then(|p| p.get_mut(0..4)) { w.copy_from_slice(&(k.min(3) as i32).to_le_bytes()); }
+    }
     // The objects' groups: object i is record i + 1 (Ratchet is record 0).
     let mut groups: Vec<Vec<u16>> = Vec::new();
     for (i, o) in def.objects.iter().enumerate() {
@@ -196,6 +201,10 @@ pub fn ship_start(def: &MapDef, host: &[u8]) -> Option<([f32; 3], f32)> {
     Some(([ship.position[0] + dx * c - dy * s, ship.position[1] + dx * s + dy * c, ship.position[2] + sp[2] - hp[2]], syaw + d))
 }
 
+/// Classes whose own collision Ratchet's movement does not test (Novalis's shell walls 709-711 are a single sphere):
+/// Solid bakes their model, as for a class without collision.
+pub const BAKE_ANYWAY: [i32; 3] = [709, 710, 711];
+
 /// The world triangles of the map's solid objects (`Object::solid`): each one's model (its low LOD when it has one:
 /// fewer faces; else its high LOD) at its placement (the record's scale, its facing, its position). Each triangle is
 /// wound as the collision faces are (the cross product of its edges against the face's outward normal, judged from the
@@ -206,6 +215,8 @@ pub fn solid_triangles(def: &MapDef, classes: &[LevelMobyClass], gameplay: &[u8]
     for (i, o) in def.objects.iter().enumerate() {
         if o.solid != Some(true) { continue; }
         let Some(class) = classes.iter().find(|c| c.o_class == o.asset.number) else { continue };
+        // A class with its own collision keeps it (it moves, breaks and hides with the object) and is never made solid
+        // by itself (`Editor::fill_solid`): ticked by hand, its model is baked too, a copy that stays where it was put.
         let scale = instances.get(i + 1).map_or(1.0, |m| m.scale);
         let c = &class.class;
         let lists: Vec<&rc_formats::moby::MobySubmesh> = if c.low_lod.iter().any(|sm| !sm.triangles.is_empty()) { c.low_lod.iter().collect() } else { c.high_lod.iter().collect() };
@@ -243,7 +254,11 @@ pub fn solid_triangles(def: &MapDef, classes: &[LevelMobyClass], gameplay: &[u8]
 }
 
 /// The classes that move along a spline the map can give them (`Object::path`; the editor offers a path for these).
-pub const PATH_CLASSES: [i32; 3] = [726, 459, 1454];
+pub const PATH_CLASSES: [i32; 9] = [726, 38, 1474, 1150, 1151, 1141, 903, 459, 1454];
+
+/// The path platforms: the classes that run the path platform 726's code (its pvars: spline +0xb4, start +0xa0, travel
+/// time +0xb0): Umbris's lifts 38 / 1474, Gaspar's 1150 / 1151, Orxon's 1141, Oltanis's 903.
+pub const MOVERS: [i32; 7] = [726, 38, 1474, 1150, 1151, 1141, 903];
 
 /// Points an object's pvars at map spline `index` (`time`: a mover's travel time): the path platform 726 (rc_game
 /// `path_platform`: spline +0xb4, starts at the path's first point +0xa0 = 1, travel time +0xb0) and the robot
@@ -253,7 +268,7 @@ pub const PATH_CLASSES: [i32; 3] = [726, 459, 1454];
 /// (`veldin_tank`: drives to a random next point of its path, +0x100).
 fn path_pvars(t: &mut TemplateRecord, index: i32, time: Option<f32>) {
     let set: Vec<(usize, [u8; 4])> = match t.instance.o_class {
-        726 => {
+        c if MOVERS.contains(&c) => {
             let mut v = vec![(0xb4, index.to_le_bytes()), (0xa0, [1, 0, 0, 0])];
             if let Some(s) = time { v.push((0xb0, s.to_le_bytes())); }
             v
@@ -386,8 +401,36 @@ pub fn songs(root: &Path) -> &'static [(u32, u32, String)] {
     })
 }
 
-/// The classes a class's code makes that a map imports with it ([`AWAY`]).
-pub fn children(o_class: i32) -> &'static [i32] { AWAY.iter().find(|a| a.0 == o_class).map_or(&[], |a| a.2) }
+/// The classes a class's code makes that a map imports with it: [`AWAY`]'s, and a breakable's pieces and remains
+/// (`breakables::RECIPES`; Novalis's own: the burning rock bits 696–698, the pipe's spray 779). Without them a prop
+/// of another level breaks into nothing.
+pub fn children(o_class: i32) -> &'static [i32] {
+    use rc_game::moby_update::classes::breakables::{Piece, Remains, RECIPES};
+    static BREAK: OnceLock<Vec<(i32, Vec<i32>)>> = OnceLock::new();
+    if let Some(a) = AWAY.iter().find(|a| a.0 == o_class) { return a.2; }
+    let table = BREAK.get_or_init(|| {
+        let mut out: Vec<(i32, Vec<i32>)> = [704, 709, 710, 711, 729].iter().map(|&c| (c, vec![696, 697, 698])).collect();
+        out.push((778, vec![779]));
+        for r in &RECIPES {
+            let mut made: Vec<i32> = Vec::new();
+            for p in r.pieces {
+                match *p {
+                    Piece::Single(c) | Piece::Ring4(c) => made.push(c as i32),
+                    Piece::Burst { a, na, b, nb, .. } => {
+                        made.extend((0..na).map(|k| a as i32 + k));
+                        made.extend((0..nb).map(|k| b as i32 + k));
+                    }
+                }
+            }
+            if let Remains::Scaled(c) | Remains::Plain(c) = r.remains { made.push(c as i32); }
+            made.sort_unstable();
+            made.dedup();
+            out.extend(r.classes.iter().map(|&c| (c as i32, made.clone())));
+        }
+        out
+    });
+    table.iter().find(|b| b.0 == o_class).map_or(&[], |b| b.1.as_slice())
+}
 
 /// The home-level instance a class is copied from when the map does not say (`Object::template`): its first one
 /// starts in a state a map cannot wake (the Hoven burrower #140 is buried until Ratchet is within 2 units).

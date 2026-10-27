@@ -670,6 +670,18 @@ pub struct Hud2dHook {
     pub replace_hud: bool,
     /// The HUD update loop does not run (it is part of the mode-0 render only).
     pub freeze: bool,
+    /// Lines of text in the game's fonts, drawn after [`Hud2dHook::prims`] (a RAC Maker map's flight caption).
+    pub texts: Vec<HookText>,
+}
+
+/// A line of [`Hud2dHook::texts`]: the font, its top left, the colour (GS RGBA, alpha 0..0x80) and its bytes.
+#[derive(Clone, Debug)]
+pub struct HookText {
+    pub font: rc_formats::font::Font,
+    pub x: i32,
+    pub y: i32,
+    pub rgba: u32,
+    pub text: Vec<u8>,
 }
 
 /// The mode-2 scene layer (crate::scene_render), separate from [`Hud2dHook`] (which the menus rewrite every
@@ -1070,6 +1082,10 @@ fn tick_and_build(
     let hud_off = crate::visibomb_view::hud_off(play.as_deref());
     if !hook.replace_hud && !scene.hide_hud && !hud_off { crate::text_render::execute(&mut rt.hud2d, &mut st, &rt.glyphs, &rt.draws); }
     rt.hud2d.prims.extend(hook.prims.iter().copied());
+    for t in &hook.texts {
+        let g = rt.glyphs[t.font as usize];
+        crate::text_render::font_print(&mut rt.hud2d, &mut st, &g, t.font, t.x, t.y, t.rgba, &t.text, t.text.len() as i32);
+    }
     rt.hud2d.prims.extend(scene.prims.iter().copied());
     // The main loop's card icon (`entry` 0x259c40) while the card is in use (an autosave, any save or load), drawn
     // last in every mode [L: also on the frame the page menu opens, which the game skips (0x1ba2ac)].

@@ -442,6 +442,21 @@ pub fn write(dir: &Path, c: &Catalog) -> std::io::Result<()> {
     std::fs::write(dir.join("index.html"), VIEWER.replace("/*CATALOG*/", &format!("const CATALOG = {};", json.replace("</", "<\\/"))))
 }
 
+/// The spawn test's verdicts as run here (`catalog_live.tsv`: asset id, `live` or `needs-work`, its note), so a catalog
+/// built on a PC that never ran `--spawn-test` knows which objects work on maps.
+fn shipped_verdicts() -> HashMap<&'static str, (catalog::Live, &'static str)> {
+    include_str!("catalog_live.tsv")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut f = l.splitn(3, '\t');
+            let (id, live, note) = (f.next()?, f.next()?, f.next().unwrap_or(""));
+            let live = match live { "live" => catalog::Live::Live, "needs-work" => catalog::Live::NeedsWork, _ => return None };
+            Some((id, (live, note)))
+        })
+        .collect()
+}
+
 /// `--build-catalog`: builds and writes `<data>/catalog/catalog.json`, prints a summary, returns the exit code.
 pub fn build_and_write(root: &Path) -> i32 {
     let t0 = Instant::now();
@@ -459,6 +474,11 @@ pub fn build_and_write(root: &Path) -> i32 {
         for e in &mut c.entries {
             if let Some(o) = old.find(&e.id).filter(|o| o.thumb == e.thumb && o.live.is_some()) { (e.live, e.live_note) = (o.live, o.live_note.clone()); }
         }
+    }
+    // The rest from the verdicts shipped with the build (a first catalog on another PC: the editor's "Live only").
+    let shipped = shipped_verdicts();
+    for e in c.entries.iter_mut().filter(|e| e.live.is_none()) {
+        if let Some((live, note)) = shipped.get(e.id.to_string().as_str()) { (e.live, e.live_note) = (Some(*live), note.to_string()); }
     }
     if let Err(e) = write(&dir, &c) {
         eprintln!("error: writing {}: {e}", path.display());
@@ -489,6 +509,14 @@ mod tests {
         let biter = units::PORTS.iter().position(|p| p.classes.contains(&193) && p.level == 9).expect("the pack biter's port");
         assert_eq!(port_name(ClassUpdate::Unit(biter as u16), &n).1, "pack biter");
         assert_eq!(n.about.get("eudora_brawler").map(String::as_str), Some("Eudora's brawler bots"));
+    }
+
+    #[test]
+    fn shipped_verdicts_read() {
+        let v = shipped_verdicts();
+        assert!(v.len() > 500, "{} verdicts", v.len());
+        assert!(v.values().filter(|x| x.0 == catalog::Live::Live).count() > 500);
+        assert!(v.keys().all(|k| k.starts_with("rac1/L") && k.contains("/moby/")));
     }
 }
 

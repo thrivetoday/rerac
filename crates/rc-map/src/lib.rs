@@ -17,6 +17,8 @@ pub mod json;
 pub mod patch;
 pub mod coast;
 pub mod logic;
+pub mod planet;
+pub mod share;
 pub mod terrain;
 pub mod walkway;
 
@@ -265,6 +267,10 @@ pub struct World {
     pub sky_layers: Vec<SkyLayer>,
     /// Material groups: one terrain texture recoloured wherever it is used.
     pub recolour: Vec<(AssetId, Palette)>,
+    /// The planet the flight to the map shows (`"planet"`); None: the default look (`planet::Planet::default`).
+    pub planet: Option<planet::Planet>,
+    /// Play starts without the flight through space (`"flight": false`).
+    pub no_flight: bool,
 }
 
 /// A point light of the map.
@@ -673,6 +679,21 @@ impl MapDef {
             world.sky_turn = w.get("sky_turn").and_then(Value::as_f32).unwrap_or(0.0).rem_euclid(360.0);
             world.no_sky_stars = w.get("sky_stars").and_then(Value::as_bool) == Some(false);
             world.sky_still = w.get("sky_still").and_then(Value::as_bool).unwrap_or(false);
+            world.no_flight = w.get("flight").and_then(Value::as_bool) == Some(false);
+            if let Some(p) = w.get("planet") {
+                let d = planet::Planet::default();
+                let cs = p.get("colours").and_then(Value::as_arr).unwrap_or(&[]);
+                let colour = |k: usize| rgb(cs.get(k), d.colours[k]);
+                world.planet = Some(planet::Planet {
+                    pattern: p.get("pattern").and_then(Value::as_str).and_then(planet::Pattern::from_name).unwrap_or(d.pattern),
+                    colours: [colour(0), colour(1), colour(2)],
+                    glow: rgb(p.get("glow"), d.glow),
+                    clouds: p.get("clouds").and_then(Value::as_f32).unwrap_or(d.clouds).clamp(0.0, 1.0),
+                    ring: p.get("ring").and_then(Value::as_f32).unwrap_or(0.0).clamp(0.0, 1.0),
+                    ring_colour: rgb(p.get("ring_colour"), d.ring_colour),
+                    seed: p.get("seed").and_then(Value::as_i64).unwrap_or(1).clamp(0, u32::MAX as i64) as u32,
+                });
+            }
         }
         let thumb_view = v.get("thumb_view").and_then(Value::as_f32s::<5>).filter(|v| v.iter().all(|x| x.is_finite()));
         Ok(MapDef { name, host_level, start, ship, thumb_view, death_height, loadout, abilities, reset_on_death, floors, patches, walkways, zones, rules, world, rails, objects })
@@ -844,7 +865,12 @@ impl MapDef {
             if w.sky_turn != 0.0 { f.push(format!("\"sky_turn\": {}", n(w.sky_turn))); }
             if w.no_sky_stars { f.push("\"sky_stars\": false".into()); }
             if w.sky_still { f.push("\"sky_still\": true".into()); }
+            if w.no_flight { f.push("\"flight\": false".into()); }
             let rgb = |c: [u8; 3]| format!("[{}, {}, {}]", c[0], c[1], c[2]);
+            if let Some(p) = &w.planet {
+                f.push(format!("\"planet\": {{ \"pattern\": {}, \"colours\": [{}, {}, {}], \"glow\": {}, \"clouds\": {}, \"ring\": {}, \"ring_colour\": {}, \"seed\": {} }}",
+                    q(p.pattern.name()), rgb(p.colours[0]), rgb(p.colours[1]), rgb(p.colours[2]), rgb(p.glow), n(p.clouds), n(p.ring), rgb(p.ring_colour), p.seed));
+            }
             if let Some(l) = &w.light {
                 f.push(format!("\"light\": {{ \"sun\": [{}, {}], \"sun_colour\": {}, \"ambient\": {}, \"shade\": {} }}", n(l.sun_azimuth), n(l.sun_elevation), rgb(l.sun), rgb(l.ambient), n(l.shade)));
             }
@@ -1003,7 +1029,8 @@ mod tests {
             lights: vec![PointLight { position: [150.0, 150.0, 63.0], colour: [255, 120, 40], radius: 14.0, intensity: 1.5 }],
             sky_layers: vec![SkyLayer::default(), SkyLayer { hidden: true, tint: [255, 100, 100] }],
             recolour: vec![(AssetId::parse("rac1/L01/tfrag-tex/8").unwrap(), Palette { hue: 30.0, ..Palette::default() })],
-            no_sky_stars: true, sky_still: true };
+            no_sky_stars: true, sky_still: true, no_flight: true,
+            planet: Some(planet::Planet { pattern: planet::Pattern::Bands, ring: 0.5, seed: 42, ..planet::PRESETS[4].1 }) };
         l.patches.iter_mut().for_each(|p| p.tint = Some([200, 100, 50]));
         l.objects[0].tint = Some([255, 120, 120]);
         l.ship = Some(Start { position: [150.0, 140.0, 60.0], yaw: 1.5 });

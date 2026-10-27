@@ -438,6 +438,78 @@ Live: World changes call `map_load::set` at once (decoded foreign textures cache
 the sky and moby palette still come with the reload. The skies' own motion (sky_stars twinkle / shooting stars, the
 turning shells of `level_rotations`) switchable: `World::no_sky_stars`, `World::sky_still`.
 
+## v0.6: the layout redesign (after the UI/UX research)
+
+Research: reports/Beginner friendly level editor design.md (in the launcher folder). What it changes: things are shown,
+not hidden, and the game's own pictures carry the meaning; action buttons keep a short caption; every setting has one
+home; level settings show when nothing is selected; help is layered (hover, the Help window, the guide).
+
+1. **Tool strip** (left edge): Select · Objects · Islands · Shape · Edges · Sculpt · Paths · Rails · Logic · World, a
+   painted icon and a short caption each, in groups. It replaces the tab row, the top bar's tool icons and the Terrain
+   mode chips. Maps leaves the strip (files are the main menu's; warnings are a badge on Save).
+2. **Left panel**: the tool's options under its icon and name. Select: the controls card and "On this map" (every
+   object, island, path, rail, zone and light, by group).
+3. **Right panel**: the inspector of what is selected, in any tool: object, island, path, rail, zone, light. A header
+   with its picture or icon, its name and a bin; a "Map" chip goes back. Nothing selected: the map (name, start with
+   a handle in the world, death height drawn as a red plane, ship, rules, loadout, floors).
+4. **Top bar**: icon buttons (New, Save with the warnings badge, Undo, Redo), Play, Picture, Collision; on the right
+   the radio, a View menu, camera speed and Help.
+5. **Help** is a window of its own (the inspector stays).
+6. **Status bar**: the mouse and keys of the current tool as key caps, then the message.
+7. **Pictures for choices**: island shapes, brushes, surfaces, edge kinds, zone kinds and rail looks are icon or
+   picture tiles.
+8. **Text**: the hint paragraphs go into the help; panels keep captions.
+9. **Lights** are clicked and dragged in the World tool.
+10. **Style**: shared colours, cards with rounded corners, more room.
+
+## Islands drawn and the redesign's fixes (2026-10-27)
+
+The island builder takes a drag: `IslandDrag` (`viewport`, `Editor::finish_island`) sizes Round/Square/Blob from the
+press, or traces the coast (`Shape::Draw`, `IslandSpec::outline`, `outline_land`: the distance to the drawn outline),
+on the level of the island's top so the line stays under the pointer. Three read-throughs of the v0.6 layout against
+d9dcceb found what it broke: `busy()` holds undo, Delete and the tool keys while the mouse holds something; `set_tool`
+ends a sculpt stroke properly; `keep_selection` after undo/redo; `switch_to` clears every selection and the warnings;
+the menu takes the keys while open; the Edge card's Railings/Walls tiles pick a piece; Paint and Decor say "pick
+first"; sculpting no longer selects; clicks on nothing clear any selection (Select, Logic, World); lamps picked by
+screen size and not through objects; the planet preview frees its texture and planet edits skip the reload; F1/Esc
+close the help as seen; copies beside drop the name and move the route; names keep their spaces; Share takes unsaved
+edits; the menu shows its messages.
+
+## Objects round 2 (2026-10-27)
+
+Every placeable object's picture checked (contact sheets), against the class ports and the online lists (Replanetizer
+`MobyModelsRC1.txt`, Wrench `rac_moby_classes.asset`, the fan wiki: `research_notes/RAC1 objects for RAC Maker/
+online_*`); `_categories.tsv` gained `breaks` and `about` (editor/objects.rs `Info::breaks`, `Info::about`). A Machines
+category (vendor, kiosks, teleporters); Breakables only what Ratchet breaks. `map_load::children` imports a breakable's
+pieces and remains (`breakables::RECIPES`), else a prop of another level broke into nothing.
+
+## The flight on Play and the planet (2026-10-27)
+
+`World::planet` (`rc_map::planet`: pattern, three colours, glow, clouds, ring, seed; `Planet::render`) and
+`World::no_flight`. Play (and `--map`) runs `travel_render::map_flight`: the game's transition with `Begin` and
+`Flight` only (no level change; `MAP_FLIGHT_TICKS` stand for the load, a press skips after `MAP_FLIGHT_SKIP_AFTER`),
+`flight_render::MapFlight` puts the map's planet in the planet picture's slot and its name as the caption
+(`Hud2dHook::texts`, the game's large font); the flight's sound bank replaces the level's, so `FlightAudio::Restore`
+puts it back. Then `map_entry` (the ship's landing) or play.
+
+## Phase 6: launcher and sharing (2026-10-27)
+
+`.racmap` (`rc_map::share`): the map JSON plus `"thumb_png"` (base64). Editor main menu: Share (to
+`<maps>/Shared`, shown in Explorer), Import… (Downloads and Desktop, or Windows' file window). The maps folder:
+`RERAC_MAPS_DIR`, else `<Documents known folder>\RAC Maker`, unless only the older `%USERPROFILE%\Documents\RAC Maker`
+exists. Launcher side: E:\Dev\rerac-launcher-maker, branch `rac-maker-tile` (the 4th tile, the map library, import /
+export, the runtime chosen by `--version-json`'s `maker_format`, `RERAC_MAPS_DIR` passed to rerac); uncommitted.
+
+Packaging (the gate's other half: a second PC needs a runtime that reads maps): `PACKAGE_LABEL="RAC Maker"
+tools/package/package.sh` builds `dist/rerac-0.3.6-rac-maker-windows-x86_64.zip` (manifest version "0.3.6 + RAC
+Maker"; the script's contract check now expects `maker_format`). The launcher's Versions > Install from zip unpacks it
+into `<data root>/versions/development/`; the RAC Maker tile then plays maps with it (the newest installed version
+with a `maker_format`). On a second PC: the launcher build, that zip, the player's own extracted game, a `.racmap`.
+
+Also: the main menu's Recent list (any folder), its button column scrolls; the tool strip scrolls on short windows;
+the help window stays off the left panel; Solid shows for every object (own collision: "Extra solid from its model",
+baked by `map_load::solid_triangles`, a copy that stays put).
+
 ## Camera (all RAC1 play, not only maps)
 
 RAC1's camera always turns inverted, left / right and up / down (user request 2026-10-22), whatever the Options

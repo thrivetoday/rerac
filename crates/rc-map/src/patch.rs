@@ -236,7 +236,9 @@ pub fn patch_gameplay(host: &[u8], patch: &GameplayPatch) -> Result<Vec<u8>> {
         if let Some(g) = patch.groups.iter().position(|g| g.contains(&(k as u16))) { m.group = g as i32; }
         m.size = MOBY_INSTANCE_SIZE as i32;
         m.pvar_index = -1;
-        if m.o_class != 0 && m.spawn_id >= 0 {
+        // Its own spawn id (its death and collected bits): also for the shared negative ids some classes come with
+        // (every wall 729 is -16 on the disc: one blown up would take every copy with it); -1 is none.
+        if m.o_class != 0 && m.spawn_id != -1 {
             (m.spawn_id, m.spawn_flags) = (next_id, SPAWN_ONCE_PER_VISIT);
             next_id += 1;
         }

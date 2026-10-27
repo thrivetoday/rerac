@@ -31,6 +31,10 @@
 //!   `RC_SETTINGS_PAGE=0` no "Port Options" page in the Options menu, crate::menu_render
 //! - `RC_SHADOWS=0|1`, `RC_SHADOW_DEBUG=1`, `RC_SHADOW_TRACE=1` the moby shadows, crate::shadow_render
 
+// A release build on Windows is a windowed program: started from a shortcut (RAC Maker) it opens no console window.
+// Its output still reaches whoever redirects it (the launcher's log files, `--version-json` read through a pipe).
+#![cfg_attr(all(windows, not(debug_assertions), not(feature = "dev")), windows_subsystem = "windows")]
+
 mod crash_log;
 mod asset_write;
 mod audio_out;
@@ -145,6 +149,11 @@ fn main() -> anyhow::Result<()> {
     let root = disc_source::startup();
     // `--build-catalog`: the RAC Maker asset catalog of the data folder, then exit (crate::catalog).
     if disc_source::build_catalog() { std::process::exit(catalog::build_and_write(&root)); }
+    // The editor's object pictures: built once on a PC that has none yet (about 20 s, before the window).
+    if disc_source::edit_mode() && !root.join("catalog").join("catalog.json").is_file() {
+        println!("editor: no catalog yet: building it once (about 20 s)");
+        if catalog::build_and_write(&root) != 0 { eprintln!("editor: the catalog could not be built: the object list stays empty"); }
+    }
     // `--spawn-test`: every ported moby class of the catalog on test maps, the verdicts into the catalog (crate::spawn_test).
     if disc_source::spawn_test() { std::process::exit(spawn_test::run_all(&root)); }
     // `--map <file>`: a RAC Maker map on its host level, which becomes the boot level (crate::map_load).

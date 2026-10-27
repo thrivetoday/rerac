@@ -142,7 +142,14 @@ struct Transition {
     state: StepState,
     /// The view replaced by the black screen (the cards, the movies, the flight).
     blanked: bool,
+    /// A RAC Maker map's flight to its planet before play ([`map_flight`]): no level change; ticks flown.
+    map: Option<u32>,
 }
+
+/// A map's flight: at least this long before the approach (60 Hz ticks), as the game's flight waits for the load.
+const MAP_FLIGHT_TICKS: u32 = 150;
+/// A press skips the rest of a map's flight after this many ticks.
+const MAP_FLIGHT_SKIP_AFTER: u32 = 20;
 
 /// The actors drawn for a space scene, the flight or the title world (crate::scene_render's actor scheme).
 #[derive(Default)]
@@ -332,9 +339,16 @@ fn pre_tick(
     let fresh = match editor { None => play.is_added(), Some(_) => playing && !*was_playing };
     *was_playing = playing;
     let p = &mut *play;
-    // A RAC Maker map with a ship: every play starts with its landing (crate::map_load::ship_start put Ratchet by it).
-    if fresh && t.tr.is_none() && !crate::saves::front_end_active() && crate::map_load::on(p.level_index()).is_some_and(|d| d.ship.is_some()) {
-        map_entry(t, p, &mut mm, &level.0);
+    // A RAC Maker map: every play starts with the flight to its planet (unless the map turns it off), then the landing
+    // of its ship if it has one (crate::map_load::ship_start put Ratchet by it).
+    if fresh && t.tr.is_none() && !crate::saves::front_end_active() {
+        if let Some(d) = crate::map_load::on(p.level_index()) {
+            if !d.world.no_flight {
+                map_flight(t, p);
+            } else if d.ship.is_some() {
+                map_entry(t, p, &mut mm, &level.0);
+            }
+        }
     }
     // `entry` after a level change: the landing (the set-up has built the play state).
     if std::mem::take(&mut t.entry_pending) && t.tr.is_some() {
@@ -364,7 +378,7 @@ fn pre_tick(
                     if let Some(g) = gs.as_deref() {
                         let plan = transition::plan(&g.0, dest, &|n| p.svc.ticks(n));
                         if t.trace { println!("travel: DoSpaceTransition({dest}) from {}: {:?}, ship {}", plan.from, plan.steps, plan.ship); }
-                        t.tr = Some(Transition { plan, step: 0, state: StepState::New, blanked: false });
+                        t.tr = Some(Transition { plan, step: 0, state: StepState::New, blanked: false, map: None });
                     }
                 }
                 Request::ShipTravel(dest) => ship_travel(t, p, &mut mm, gs.as_deref_mut(), &level.0, dest),
@@ -491,6 +505,40 @@ fn map_entry(t: &mut Travel, p: &mut Play, mm: &mut MenuMode, lv: &crate::level_
     println!("travel: map entry: {}", if lands { "the ship's landing" } else { "no landing scene: mode 0" });
 }
 
+/// A RAC Maker map's flight to its planet (the game's flight between planets, `Begin` and `Flight` alone: the map is
+/// loaded already): its planet's picture and name (crate::flight_render::MapFlight), then [`map_flight_end`].
+fn map_flight(t: &mut Travel, p: &mut Play) {
+    let level = p.svc.level as i32;
+    let plan = Plan { dest: level, from: level, ship: p.svc.travel.ship, steps: vec![Step::Begin, Step::Flight], first_arrival: false };
+    t.tr = Some(Transition { plan, step: 0, state: StepState::New, blanked: false, map: Some(0) });
+    println!("travel: map play: the flight to the map's planet");
+}
+
+/// A map's flight ended (or was skipped): the level's sounds back, then the ship's landing, or play at once.
+fn map_flight_end(t: &mut Travel, p: &mut Play, mm: &mut MenuMode, lv: &crate::level_load::LoadedLevel, active: &mut ActiveScene, flight: &mut crate::flight_render::FlightRender) {
+    crate::flight_render::post_audio(crate::flight_render::FlightAudio::Restore);
+    flight.active = false;
+    flight.draw = None;
+    flight.map = None;
+    active.camera = None;
+    t.tr = None;
+    t.blank = false;
+    t.hud_off = false;
+    t.hero_hidden = false;
+    t.lump = None;
+    t.gfx = ActorGfx::default();
+    t.mode = Default::default();
+    p.svc.cinematic.fade = 0.0;
+    if crate::map_load::on(p.level_index()).is_some_and(|d| d.ship.is_some()) {
+        map_entry(t, p, mm, lv);
+    } else {
+        mm.state.set(Mode::Gameplay);
+        p.game.camera_paused = false;
+        p.svc.game_mode = 0;
+        println!("travel: the map's flight ended: play");
+    }
+}
+
 /// The space scene's actors are set up from the lump on the next upload.
 fn start_actors(t: &mut Travel, l: SpaceLump) {
     t.lump = Some(l);
@@ -562,6 +610,15 @@ fn post_tick(
     // RAC Maker's editor, back from play (F5) in the middle of a landing or take-off: the scene's hold let go, as at
     // its end, so the editor's view shows Ratchet and the world.
     let playing = editor.as_deref().is_some_and(|m| *m == crate::editor::EditorMode::Playing);
+    // Back to the editor during a map's flight: the flight let go and the level's sounds back.
+    if editor.is_some() && !playing && *was_playing && t.tr.as_ref().is_some_and(|tr| tr.map.is_some()) {
+        map_flight_end(t, p, &mut mm, &level.0, &mut active, &mut flight);
+        t.mode = Default::default();
+        t.hero_hidden = false;
+        mm.state.set(Mode::Gameplay);
+        p.game.camera_paused = false;
+        p.svc.game_mode = 0;
+    }
     if editor.is_some() && !playing && std::mem::replace(&mut *was_playing, false) && t.mode.active() {
         t.mode = Default::default();
         t.lump = None;
@@ -582,7 +639,7 @@ fn post_tick(
     let lv = &level.0;
     if let Some(mut tr) = t.tr.take() {
         let done = transition_frame(t, &mut tr, p, &mut mm, gs.as_deref_mut(), session.as_deref_mut(), lv, &mut active, &mut change, &movie, audio.as_deref_mut(), &mut flight);
-        if !done { t.tr = Some(tr); }
+        if !done { t.tr = Some(tr); } else if tr.map.is_some() { map_flight_end(t, p, &mut mm, lv, &mut active, &mut flight); }
         return;
     }
     // InLevelFrameUpdate: `0x15f630` (the ship's △ of the last tick) with HP ≠ 0 → ShipTakeOff.
@@ -818,6 +875,8 @@ fn transition_frame(
                 let variants = crate::flight_render::variants();
                 let rigs = crate::flight_render::rigs();
                 let (first, dest) = (tr.plan.first_arrival, tr.plan.dest);
+                // A map's flight shows the map's planet and name.
+                flight.map = tr.map.and_then(|_| crate::map_load::on(dest.max(0) as u32)).map(|d| crate::flight_render::MapFlight { planet: d.world.planet.unwrap_or_default(), name: d.name.clone() });
                 let mut out = SpaceFrame::default();
                 with_world(p, lv.collision.as_ref(), |w| t.mode.flight_start(w, variants, first, dest, rigs, &mut out));
                 apply_audio(&out.audio);
@@ -829,6 +888,15 @@ fn transition_frame(
                 return false;
             }
             (StepState::Flight, Step::Flight) => {
+                // A map's flight: "loaded" after its minimum, and a press skips the rest.
+                let loaded = match tr.map.as_mut() {
+                    Some(k) => {
+                        *k += 1;
+                        if *k > MAP_FLIGHT_SKIP_AFTER && p.game.pad.pressed != 0 { return true; }
+                        *k >= MAP_FLIGHT_TICKS
+                    }
+                    None => loaded,
+                };
                 t.mode.flight.loaded = loaded;
                 let out = with_world(p, lv.collision.as_ref(), |w| t.mode.frame(w, 0, false));
                 t.lump = t.mode.lump.clone();
@@ -941,7 +1009,7 @@ fn hud_layer(
     // The flight's caption and card icon (crate::flight_render).
     if let Some(img) = images.as_deref_mut() {
         let busy = crate::saves::with_card(|c| c.state > 2 || c.req_state >= 0).unwrap_or(false);
-        crate::flight_render::hud_prims(&mut flight, &mut h, img, &mut assets, crate::hud_render::language(), busy);
+        if let Some(text) = crate::flight_render::hud_prims(&mut flight, &mut h, img, &mut assets, crate::hud_render::language(), busy) { hook.texts.push(text); }
     }
     hook.prims.extend(h.prims);
 }

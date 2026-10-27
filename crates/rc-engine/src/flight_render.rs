@@ -92,7 +92,23 @@ pub enum FlightAudio {
     Bank,
     /// Sound v of the bank, volume 0x400, pan 0, no pitch.
     Sound(i32),
+    /// A RAC Maker map's flight ended: the level's own sound data back (no level change brings it).
+    Restore,
 }
+
+/// The level's sound data a map's flight put aside ([`FlightAudio::Restore`]).
+static SAVED_AUDIO: Mutex<Option<rc_game::audio::LevelAudio>> = Mutex::new(None);
+
+/// A RAC Maker map's flight (crate::travel_render's map flight): its planet replaces the destination's picture and its
+/// name the caption.
+#[derive(Clone, Debug)]
+pub struct MapFlight {
+    pub planet: rc_map::planet::Planet,
+    pub name: String,
+}
+
+/// The map's planet picture's size.
+const MAP_PLANET_SIZE: usize = 256;
 
 static AUDIO: Mutex<VecDeque<FlightAudio>> = Mutex::new(VecDeque::new());
 
@@ -106,11 +122,13 @@ pub struct FlightRender {
     pub draw: Option<FlightDraw>,
     /// The flight runs (crate::travel_render: from the flight step's start to its end).
     pub active: bool,
+    /// A RAC Maker map's flight: its planet and name.
+    pub map: Option<MapFlight>,
     sky: Vec<(Entity, usize)>,
     sky_data: Option<Arc<crate::sky_render::LevelSky>>,
     /// The lump's FX textures and the planet picture at [`PLANET_FX`], for the destination `fx_dest`.
     fx: Vec<Option<Texture>>,
-    fx_dest: Option<i32>,
+    fx_dest: Option<(i32, bool)>,
     planet_slots: FxSlots,
     slots: FxSlots,
     /// The caption (raw GS RGBA) of (dest, language).
@@ -246,9 +264,13 @@ fn draw_fx(
     let (mut planet, mut groups) = (Vec::new(), Vec::new());
     if !f.active { f.glass = Default::default(); }
     if let (Some(d), true, Some(cam_t)) = (f.draw.as_ref(), f.active, cams.iter().next()) {
-        if f.fx_dest != Some(d.dest) {
+        let key = (d.dest, f.map.is_some());
+        if f.fx_dest != Some(key) {
             f.fx = fx_for(d.dest);
-            f.fx_dest = Some(d.dest);
+            if let (Some(m), Some(last)) = (f.map.as_ref(), f.fx.last_mut()) {
+                *last = Some(Texture { width: MAP_PLANET_SIZE as _, height: MAP_PLANET_SIZE as _, rgba: m.planet.render(MAP_PLANET_SIZE) });
+            }
+            f.fx_dest = Some(key);
             // The planet image slot caches its picture: a new destination needs fresh slots.
             let mut fresh = FxSlots::default();
             fresh.layer = f.planet_slots.layer.clone();
@@ -300,12 +322,17 @@ fn raw_alpha(t: &Texture) -> Texture {
 
 /// The flight's 2D draws (module docs): the caption and the card icon, into the transition's HUD layer
 /// (crate::travel_render's `hud_layer`).
-pub(crate) fn hud_prims(f: &mut FlightRender, h: &mut crate::hud_render::Hud2d, img: &mut crate::hud_images::HudImages, assets: &mut Assets<Image>, lang: u32, card_busy: bool) {
+/// A map's flight returns its caption instead: the map's name in the game's font, with its fade.
+pub(crate) fn hud_prims(f: &mut FlightRender, h: &mut crate::hud_render::Hud2d, img: &mut crate::hud_images::HudImages, assets: &mut Assets<Image>, lang: u32, card_busy: bool) -> Option<crate::hud_render::HookText> {
     use crate::hud_render::H;
     use rc_game::menus::ImageSrc;
-    let Some(d) = f.draw.as_ref().filter(|_| f.active) else { return };
+    let d = f.draw.as_ref().filter(|_| f.active)?;
     f.vsync += 1;
-    if d.caption_alpha != 0 {
+    let mut text = None;
+    if d.caption_alpha != 0 && f.map.is_some() {
+        let name: Vec<u8> = f.map.as_ref().map_or_else(Vec::new, |m| m.name.bytes().filter(|b| (0x20..0x7f).contains(b)).take(28).collect());
+        text = Some(crate::hud_render::HookText { font: rc_formats::font::Font::Large, x: space::CAPTION_X, y: H - space::CAPTION_DY, rgba: d.caption_alpha << 24 | 0x80_8080, text: name });
+    } else if d.caption_alpha != 0 {
         let key = (d.dest, lang);
         if f.caption.as_ref().is_none_or(|c| c.0 != key) {
             f.caption = lump()
@@ -319,12 +346,12 @@ pub(crate) fn hud_prims(f: &mut FlightRender, h: &mut crate::hud_render::Hud2d, 
             }
         }
     }
-    if !card_busy { return; }
+    if !card_busy { return text; }
     if f.card_icons.is_none() {
         let fx = lump().and_then(|l| l.fx_textures().ok()).unwrap_or_default();
         if let (Some(Some(a)), Some(Some(b))) = (fx.get(2), fx.get(3)) { f.card_icons = Some([Arc::new(raw_alpha(a)), Arc::new(raw_alpha(b))]); }
     }
-    let Some([icon, spin]) = f.card_icons.clone() else { return };
+    let Some([icon, spin]) = f.card_icons.clone() else { return text };
     let [x, dy, w, hh] = space::CARD_ICON;
     if let Some(s) = img.resolve(&ImageSrc::Pixels { key: 0x7d00_0002, tex: icon }, assets) {
         h.prims.push(crate::hud_images::prim(s, x, H - dy, w, hh, 0, 0, w, hh, 0x8080_8080));
@@ -348,10 +375,11 @@ pub(crate) fn hud_prims(f: &mut FlightRender, h: &mut crate::hud_render::Hud2d, 
             uv16: false,
         });
     }
+    text
 }
 
 /// The flight's audio requests (module docs).
-fn audio_requests(mut audio: Option<ResMut<crate::audio_out::AudioOut>>) {
+fn audio_requests(mut audio: Option<ResMut<crate::audio_out::AudioOut>>, f: Res<FlightRender>) {
     let reqs: Vec<FlightAudio> = AUDIO.lock().unwrap_or_else(|e| e.into_inner()).drain(..).collect();
     let Some(out) = audio.as_deref_mut() else { return };
     for r in reqs {
@@ -374,6 +402,8 @@ fn audio_requests(mut audio: Option<ResMut<crate::audio_out::AudioOut>>) {
                     env_points: Vec::new(),
                     collision: None,
                 };
+                // A map's flight: no level change follows to bring the level's sound data back ([`FlightAudio::Restore`]).
+                if f.map.is_some() { *SAVED_AUDIO.lock().unwrap_or_else(|e| e.into_inner()) = Some(out.system().data.clone()); }
                 out.swap_level(data);
                 // The IOP keeps the master volumes the level's last `sound_update` set (the flight runs none).
                 let sys = out.system();
@@ -381,6 +411,12 @@ fn audio_requests(mut audio: Option<ResMut<crate::audio_out::AudioOut>>) {
                     sys.snd.set_master_volume(group, vol, &mut sys.spu);
                 }
                 println!("flight: the flight's sound bank loaded");
+            }
+            FlightAudio::Restore => {
+                if let Some(data) = SAVED_AUDIO.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    out.swap_level(data);
+                    println!("flight: the level's sound data back after the map's flight");
+                }
             }
             FlightAudio::Sound(v) => {
                 let sys = out.system();

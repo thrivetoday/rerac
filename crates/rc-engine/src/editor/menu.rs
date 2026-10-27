@@ -28,6 +28,79 @@ pub(super) struct MainMenu {
     dragging: Option<usize>,
     /// Per thumbnail file: when it was written and its texture.
     thumbs: HashMap<PathBuf, (SystemTime, Option<egui::TextureId>)>,
+    /// Import: the shared maps found in Downloads and on the Desktop (None: the list closed).
+    found: Option<Vec<PathBuf>>,
+    /// Import's file window, open on its own thread: its answer (Some(None): cancelled).
+    picked: Option<std::sync::Arc<std::sync::Mutex<Option<Option<PathBuf>>>>>,
+}
+
+/// The shared maps (`.racmap`) in Downloads and on the Desktop, newest first.
+fn find_shared() -> Vec<PathBuf> {
+    let mut v: Vec<(SystemTime, PathBuf)> = [&FOLDERID_DOWNLOADS, &FOLDERID_DESKTOP]
+        .into_iter()
+        .filter_map(known_folder)
+        .flat_map(|d| std::fs::read_dir(d).into_iter().flatten().filter_map(|e| e.ok()).map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("racmap")))
+        .map(|p| (std::fs::metadata(&p).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH), p))
+        .collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.into_iter().map(|x| x.1).collect()
+}
+
+/// Windows' own file window (the Explorer one) for a shared map, on a thread: PowerShell's `OpenFileDialog`.
+fn pick_file() -> std::sync::Arc<std::sync::Mutex<Option<Option<PathBuf>>>> {
+    let out = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let slot = out.clone();
+    std::thread::spawn(move || {
+        // A PowerShell single-quoted string: its quotes doubled.
+        let start = known_folder(&FOLDERID_DOWNLOADS).map(|d| d.to_string_lossy().replace('\'', "''")).unwrap_or_default();
+        let script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title = 'Import a map'; \
+             $d.Filter = 'RAC Maker maps (*.racmap;*.json)|*.racmap;*.json'; $d.InitialDirectory = '{start}'; \
+             if ($d.ShowDialog() -eq 'OK') {{ [Console]::Out.Write($d.FileName) }}"
+        );
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(["-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", &script]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashes up
+        }
+        let path = cmd.output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).filter(|s| !s.is_empty()).map(PathBuf::from);
+        *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+    });
+    out
+}
+
+/// A shared map into the maps folder (its picture beside it), under a free name: the new file, or why not.
+fn import_map(from: &std::path::Path) -> std::result::Result<PathBuf, String> {
+    let text = std::fs::read_to_string(from).map_err(|e| format!("could not read it: {e}"))?;
+    let (mut map, png) = rc_map::share::from_racmap(&text).map_err(|e| e.0)?;
+    let name = if map.name.trim().is_empty() { from.file_stem().map_or("Map".into(), |s| s.to_string_lossy().into_owned()) } else { map.name.trim().to_string() };
+    let to = free_path(&name);
+    map.name = to.file_stem().map_or(name, |s| s.to_string_lossy().into_owned());
+    std::fs::write(&to, map.to_json()).map_err(|e| format!("could not write it: {e}"))?;
+    // Its picture: the one inside, else a .png beside a plain map file.
+    match png {
+        Some(png) => { let _ = std::fs::write(thumb_path(&to), png); }
+        None => { let _ = std::fs::copy(from.with_extension("png"), thumb_path(&to)); }
+    }
+    Ok(to)
+}
+
+/// The map (and its picture) as a `.racmap` in the maps folder's Shared folder, shown in Explorer.
+/// `open`: the map as it is in the editor, when it is the open one (its unsaved changes go along).
+fn share_map(src: &std::path::Path, open: Option<String>) -> std::result::Result<PathBuf, String> {
+    let text = match open { Some(t) => t, None => std::fs::read_to_string(src).map_err(|e| format!("could not read it: {e}"))? };
+    let map = MapDef::parse(&text).map_err(|e| e.0)?;
+    let png = std::fs::read(thumb_path(src)).ok();
+    let dir = maps_dir().join("Shared");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stem = src.file_stem().map_or("map".into(), |s| s.to_string_lossy().into_owned());
+    let to = dir.join(format!("{stem}.racmap"));
+    std::fs::write(&to, rc_map::share::to_racmap(&map.to_json(), png.as_deref())).map_err(|e| e.to_string())?;
+    let _ = std::process::Command::new("explorer").arg(format!("/select,{}", to.display())).spawn();
+    Ok(to)
 }
 
 impl MainMenu {
@@ -152,7 +225,8 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
             let right_w = (area.width() * 0.3).clamp(260.0, 420.0);
             ui.horizontal_top(|ui| {
                 // ---------------------------------------------------------------- the buttons
-                ui.vertical(|ui| {
+                // A short window scrolls the buttons (Recent can push Quit down).
+                egui::ScrollArea::vertical().id_salt("menu_left").max_width(left_w + 8.0).show(ui, |ui| ui.vertical(|ui| {
                     ui.set_width(left_w);
                     let big = |ui: &mut egui::Ui, text: &str, fill: Option<egui::Color32>| {
                         let mut b = egui::Button::new(egui::RichText::new(text).size(19.0).strong()).min_size(egui::vec2(left_w, 46.0));
@@ -187,6 +261,25 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
                         let _ = open_in_shell(&maps_dir());
                     }
                     if big(ui, "Guide", None).on_hover_text("How everything works, in your browser").clicked() { let _ = open_guide(); }
+                    // Recent: the maps opened last, wherever they are (also outside the maps folder).
+                    let recent: Vec<PathBuf> = ed.settings.recent.iter().filter(|p| **p != ed.path && p.exists()).take(6).cloned().collect();
+                    if !recent.is_empty() {
+                        ui.add_space(6.0);
+                        egui::Frame::group(ui.style()).show(ui, |ui| {
+                            ui.set_width(left_w - 14.0);
+                            ui.label(egui::RichText::new("Recent").strong().size(16.0));
+                            for p in recent {
+                                let name = p.file_stem().map_or(String::new(), |s| s.to_string_lossy().into_owned());
+                                let r = ui.add(egui::Button::new(name).frame(false)).on_hover_text(format!("Open {}", p.display()));
+                                if r.clicked() {
+                                    action = Some(Box::new(move |ed: &mut Editor| {
+                                        ed.open(p);
+                                        ed.menu.open = false;
+                                    }));
+                                }
+                            }
+                        });
+                    }
                     if big(ui, "Help in the editor", None).clicked() {
                         ed.help = Some(0);
                         ed.menu.open = false;
@@ -198,7 +291,7 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
                     }
                     ui.add_space(10.0);
                     ui.label(egui::RichText::new("Unsaved work is kept as a backup when you leave.").weak().small());
-                });
+                }));
                 ui.add_space(18.0);
                 // ---------------------------------------------------------------- the maps
                 let mid_w = (area.width() - left_w - right_w - 60.0).max(300.0);
@@ -208,7 +301,47 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
                         ui.label(egui::RichText::new("Your maps").size(22.0).strong());
                         ui.label(egui::RichText::new("drag a card to move it").weak().small());
                         if ui.small_button("Refresh").clicked() { ed.menu.cards = None; }
+                        if ui.small_button("Import…").on_hover_text("A map someone shared (.racmap): found in Downloads and on the Desktop, or any file").clicked() {
+                            ed.menu.found = if ed.menu.found.is_some() { None } else { Some(find_shared()) };
+                        }
                     });
+                    // What the last button did (imported, shared, or why not): the status bar is under the menu.
+                    if !ed.status.is_empty() { ui.label(egui::RichText::new(&ed.status).small().color(egui::Color32::from_rgb(0x9a, 0xaa, 0xcc))); }
+                    // Import: the shared maps found, and Windows' file window for any other.
+                    let mut import: Option<PathBuf> = None;
+                    if let Some(slot) = ed.menu.picked.clone() {
+                        let answer = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+                        if let Some(answer) = answer {
+                            ed.menu.picked = None;
+                            import = answer;
+                        }
+                    }
+                    if let Some(found) = ed.menu.found.clone() {
+                        egui::Frame::new().fill(CARD).corner_radius(8.0).inner_margin(8.0).show(ui, |ui| {
+                            if found.is_empty() { ui.label(egui::RichText::new("No shared maps (.racmap) in Downloads or on the Desktop").weak()); }
+                            for f in found.iter().take(8) {
+                                ui.horizontal(|ui| {
+                                    if ui.button("Import").clicked() { import = Some(f.clone()); }
+                                    ui.label(f.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned())).on_hover_text(f.display().to_string());
+                                });
+                            }
+                            ui.horizontal(|ui| {
+                                if ui.add_enabled(ed.menu.picked.is_none(), egui::Button::new("Browse…")).on_hover_text("Pick the file in Windows' file window").clicked() { ed.menu.picked = Some(pick_file()); }
+                                if ui.small_button("Close").clicked() { ed.menu.found = None; }
+                            });
+                        });
+                    }
+                    if let Some(f) = import {
+                        match import_map(&f) {
+                            Ok(to) => {
+                                ed.status = format!("Imported {}", to.file_stem().map_or(String::new(), |s| s.to_string_lossy().into_owned()));
+                                ed.menu.selected = Some(to);
+                                ed.menu.found = None;
+                                ed.menu.cards = None;
+                            }
+                            Err(e) => ed.status = format!("Could not import {}: {e}", f.display()),
+                        }
+                    }
                     ui.add_space(6.0);
                     let mut cards = ed.menu.cards.take().unwrap_or_default();
                     let mut rects: Vec<egui::Rect> = Vec::new();
@@ -321,7 +454,7 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
                             None => {
                                 let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
                                 ui.painter().rect_filled(rect, 4.0, egui::Color32::from_rgb(0x24, 0x34, 0x58));
-                                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "No thumbnail yet\nopen the map, fly the camera to a nice view\nand press Set thumbnail (top bar)", egui::FontId::proportional(15.0), egui::Color32::from_rgb(0x9a, 0xaa, 0xcc));
+                                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "No thumbnail yet\nopen the map, fly the camera to a nice view\nand press the camera button (top bar)", egui::FontId::proportional(15.0), egui::Color32::from_rgb(0x9a, 0xaa, 0xcc));
                             }
                         }
                         ui.label(egui::RichText::new(&name).size(24.0).strong());
@@ -347,6 +480,13 @@ pub(super) fn main_menu(ctx: &egui::Context, ed: &mut Editor, contexts: &mut Egu
                             }
                         });
                         ui.horizontal(|ui| {
+                            if ui.button("Share").on_hover_text("Saves it as one .racmap file (with its picture) to send to someone; they import it here or in the ReRAC Launcher").clicked() {
+                                let open = (sel == ed.path).then(|| ed.def.to_json());
+                                match share_map(&sel, open) {
+                                    Ok(to) => ed.status = format!("Saved for sharing: {}", to.display()),
+                                    Err(e) => ed.status = format!("Could not share it: {e}"),
+                                }
+                            }
                             if ui.button("Duplicate").clicked() {
                                 let (src, name) = (sel.clone(), name.clone());
                                 action = Some(Box::new(move |ed: &mut Editor| {
