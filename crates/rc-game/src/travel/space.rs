@@ -519,6 +519,24 @@ impl ShipMode {
         true
     }
 
+    /// RAC Maker maps with a ship: the landing whatever the level and the story (`landing_start` without its level
+    /// tests). Some(mode 6 runs) or None (no lump: mode 0).
+    pub fn map_landing(&mut self, w: &mut World, lump: Option<SpaceLump>, out: &mut SpaceFrame) -> bool {
+        self.level_start = true;
+        w.svc.travel.reset_trip = false;
+        let Some(l) = lump else {
+            w.svc.game_mode = 0;
+            self.phase = Phase::Idle;
+            return false;
+        };
+        self.sub_tick = -1;
+        w.svc.game_mode = 6;
+        self.fade = 1.0;
+        self.sub = 0;
+        self.enter(w, SUB_LANDING, l, out);
+        true
+    }
+
     /// `parse_space_scene_chunk(k)` / `FUN_00259288` in mode 6: the chunk's actors created on first sight (actor 0 of
     /// class 533 → the ship's class; +0x32 = 0x1ff, +0x72 = 0xff, mode \|= 6 (the port adds the hidden bit: it draws
     /// them itself), +0x94 = 0, the hero's light words or 0x38383800000000, +0x73 = 0x18 when class +6).
@@ -1484,6 +1502,9 @@ fn walk_back(w: &mut World) {
         let f = w.hero_fields_mut();
         f.call(HeroCall::WalkTo { point: p, yaw, release: 1 });
         f.pose = Some(crate::moby_update::services::HeroPose { pos: p, yaw, target_yaw: yaw });
+    } else if crate::moby_update::services::SKIP_MISSING_CLASSES.load(std::sync::atomic::Ordering::Relaxed) {
+        // A RAC Maker map whose start has no ground behind it: released where he stands (the game always has it).
+        w.hero_fields_mut().call(HeroCall::WalkTo { point: pos, yaw, release: 1 });
     }
 }
 

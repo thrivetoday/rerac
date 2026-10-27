@@ -240,6 +240,13 @@ fn reach(level: i32, group: i32, f51a: bool) -> (f32, f32) {
 /// `0x20cd08(p, …, exclude, 0)` (Kerwan: `0x205830`): the first grind path near `p` (module doc): inside its
 /// bounding sphere, the nearest point `q` (the 12 / 10 search) within the [`reach`] of `p` (xy distance, |dz|).
 fn find_rail(paths: &[GrindPath], p: V3, level: i32, group: i32, f51a: bool, exclude: Option<usize>) -> Option<(usize, V3, Cursor, bool)> {
+    find_rail_heading(paths, p, level, group, f51a, exclude, None)
+}
+
+/// [`find_rail`]; with `heading` (RAC Maker maps, whose two-way rails are a rail and its reverse on the same line),
+/// of the rails in reach the one running most along `heading` (Ratchet's facing) instead of the first.
+fn find_rail_heading(paths: &[GrindPath], p: V3, level: i32, group: i32, f51a: bool, exclude: Option<usize>, heading: Option<V3>) -> Option<(usize, V3, Cursor, bool)> {
+    let mut best: Option<(f32, (usize, V3, Cursor, bool))> = None;
     for (i, gp) in paths.iter().enumerate() {
         if Some(i) == exclude || gp.points.is_empty() { continue; }
         let c = [gp.bsphere[0], gp.bsphere[1], gp.bsphere[2]];
@@ -247,9 +254,17 @@ fn find_rail(paths: &[GrindPath], p: V3, level: i32, group: i32, f51a: bool, exc
         let closed = gp.flag != 0;
         let Some((q, cur)) = spline::nearest(&gp.points, closed, 12.0, 10.0, 0.0, p) else { continue };
         let (hr, vr) = reach(level, group, f51a);
-        if spline::dist2(p, q) < hr && (p[2] - q[2]).abs() < vr { return Some((i, q, cur, closed)); }
+        if !(spline::dist2(p, q) < hr && (p[2] - q[2]).abs() < vr) { continue; }
+        let Some(hd) = heading else { return Some((i, q, cur, closed)) };
+        // The rail's direction at the cursor's segment.
+        let n = gp.points.len();
+        let k = (cur.seg.max(0) as usize).min(n.saturating_sub(2));
+        let (a, b) = (gp.points[k], gp.points[(k + 1) % n]);
+        let t = [b[0] - a[0], b[1] - a[1]];
+        let score = (t[0] * hd[0] + t[1] * hd[1]) / (t[0].hypot(t[1]) * hd[0].hypot(hd[1])).max(1e-6);
+        if best.as_ref().is_none_or(|x| score > x.0) { best = Some((score, (i, q, cur, closed))); }
     }
-    None
+    best.map(|b| b.1)
 }
 
 /// The rail mount points of levels 0x10, 0xe and 6 (`0x20cf58`): no rail contact farther than the radius from
@@ -294,7 +309,9 @@ fn rail_contact_probe(h: &mut Hero, paths: &[GrindPath], level: i32) {
         || (matches!(st, 0x29 | 0x2a) && (h.boots.off_rail != 0 || h.boots.f914 != 0))
         || (h.group == 4 && (h.jump.descending != 0 || h.f51a != 0));
     if !ok { return; }
-    let Some((i, q, cur, closed)) = find_rail(paths, pos, h.idle.level, h.group, h.f51a != 0, None) else { return };
+    // RAC Maker maps: two-way rails, the one Ratchet heads along.
+    let heading = crate::moby_update::services::SKIP_MISSING_CLASSES.load(std::sync::atomic::Ordering::Relaxed).then(|| f3(h.rows[0]));
+    let Some((i, q, cur, closed)) = find_rail_heading(paths, pos, h.idle.level, h.group, h.f51a != 0, None, heading) else { return };
     let dz = pos[2] - q[2];
     let b = &mut h.boots;
     if (st != 0x29 || b.f914 == 0 || Some(i) != b.rail) && -0.5 < dz && (dz < 0.57 || h.f51a != 0) {

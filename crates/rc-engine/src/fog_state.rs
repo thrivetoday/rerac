@@ -43,7 +43,6 @@ use bevy::shader::ShaderRef;
 use rc_formats::collision::Collision;
 use rc_formats::gameplay::FogZones;
 use rc_game::fog_zones::{self, FogGlobals, UnderwaterLook, UnderwaterState};
-use std::path::Path;
 use std::time::Instant;
 
 /// The per-frame fog update; every fog consumer runs after it.
@@ -57,29 +56,20 @@ pub struct FogLevelData {
     pub lights: rc_formats::gameplay::StaticLights,
 }
 
-/// Reads the level's fog zones (gameplay section 0x80) and collision mesh.
-pub fn load(root: &Path, index: u32) -> Result<FogLevelData> {
+/// The level's fog zones (gameplay section 0x80) and static lights from its loaded gameplay file, with its loaded
+/// collision mesh (for the underwater test). Both come from the loaded level, not re-read from the data folder: a RAC
+/// Maker map replaces the disc's (crate::map_load).
+pub fn load(gameplay: &[u8], mesh: Option<Collision>) -> Result<FogLevelData> {
     let t0 = Instant::now();
-    let read = |name: &str| crate::disc_source::level_file(root, index, name);
-    let gameplay = rc_data::level_gameplay(root, index).context("decompressing gameplay_ntsc")?;
-    let zones = rc_formats::gameplay::parse_fog_zones(&gameplay).context("parsing fog zones")?;
-    let core_index = read("core_index.bin")?;
-    let core_data = rc_data::level_core_data(root, index).context("decompressing core_data")?;
-    let core = rc_formats::level::parse_level_core(&core_index, core_data.len()).context("parsing core index")?;
-    let mesh = match rc_formats::collision::parse_collision(&core, &core_data) {
-        Ok(m) => Some(m),
-        Err(e) => {
-            eprintln!("fog: no collision mesh ({e}); the underwater test is off");
-            None
-        }
-    };
+    let zones = rc_formats::gameplay::parse_fog_zones(gameplay).context("parsing fog zones")?;
+    if mesh.is_none() { eprintln!("fog: no collision mesh; the underwater test is off"); }
     println!(
         "fog: {} fog zones, collision {}; load {:.1} ms (RC_FOG_ZONES=0 disables zones, RC_UNDERWATER=1 forces underwater)",
         zones.zones.len(),
         if mesh.is_some() { "loaded" } else { "missing" },
         t0.elapsed().as_secs_f64() * 1e3
     );
-    let lights = rc_formats::gameplay::parse_static_lights(&gameplay).context("parsing static point lights")?;
+    let lights = rc_formats::gameplay::parse_static_lights(gameplay).context("parsing static point lights")?;
     Ok(FogLevelData { zones, mesh, lights })
 }
 

@@ -163,18 +163,19 @@ fn decode_env_maps(core: &LevelCore, gs_ram: &[u8]) -> [Option<Texture>; 3] {
     ]
 }
 
-/// Parses the classes, their sequences and the instances, and builds every instance's light block.
-/// `mesh`: the level collision, for the records' ground snap (`rc_game::moby_update::scheduler::root_instances`).
-pub fn load_mobys(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], mesh: Option<&rc_formats::collision::Collision>) -> Result<LevelMobys> {
-    let gs_ram = crate::disc_source::level_file(root, crate::level_load::level_index(), "gs_ram.bin").context("reading gs_ram for the moby env maps")?;
-    load_mobys_with_gs(root, core, core_data, gameplay_file, &gs_ram, mesh)
-}
-
-/// [`load_mobys`] with the GS image given (the level's gs_ram, or the title world's GS upload, crate::title_world).
-pub fn load_mobys_with_gs(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], gs_ram: &[u8], mesh: Option<&rc_formats::collision::Collision>) -> Result<LevelMobys> {
+/// Parses the classes, their sequences and the instances, and builds every instance's light block. `gs_ram`: the GS
+/// image of the level being loaded (its gs_ram, or the title world's GS upload, crate::title_world) for the
+/// environment maps. `mesh`: the level collision, for the records' ground snap
+/// (`rc_game::moby_update::scheduler::root_instances`). `extra`: classes of other levels placed here (a RAC Maker
+/// map's imports, crate::map_load::import_classes), after the level's own.
+pub fn load_mobys_with_gs(
+    root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], gs_ram: &[u8], mesh: Option<&rc_formats::collision::Collision>,
+    extra: Vec<(LevelMobyClass, MobyAnimClass)>,
+) -> Result<LevelMobys> {
     let t0 = Instant::now();
-    let classes = moby::parse_level_mobys(core, core_data).context("parsing moby classes")?;
-    let anim = moby_anim::load_anim_classes(core, core_data, &classes);
+    let mut classes = moby::parse_level_mobys(core, core_data).context("parsing moby classes")?;
+    let mut anim = moby_anim::load_anim_classes(core, core_data, &classes);
+    for (c, a) in extra { classes.push(c); anim.push(a); }
     let rac2 = core.game == rc_formats::Game::Rac2;
     let mut instances = match core.game {
         rc_formats::Game::Rac1 => gameplay::parse_moby_instances(gameplay_file),

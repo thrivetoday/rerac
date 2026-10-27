@@ -7,9 +7,15 @@
 //! * moby instances (0x44): Ratchet's record (the host's, at the map's start), then the map's objects
 //!   ([`TemplateRecord`]: a record and pvar block copied from an instance of the object's source level);
 //! * pvar table / data / pointer fixups (0x54 / 0x58 / 0x5c): the placed records' blocks, renumbered;
-//! * moby groups, moby-link fixups, shared data, cameras, occlusion mappings (0x48 / 0x50 / 0x4c / 0x08 / 0x8c):
-//!   absent (pointer 0, which every reader takes as empty). Phase 0 maps have no groups, links or level cameras;
-//!   the host's occlusion mappings name the host's instances;
+//! * moby groups (0x48): the map's ([`GameplayPatch::groups`]; each member's record +0x48 is its group): crates of a
+//!   group stack on each other and fall when one under them breaks (rc_game `crate_`); none: absent;
+//! * moby-link fixups, shared data, cameras, sound instances, occlusion mappings (0x50 / 0x4c / 0x08 / 0x0c / 0x8c):
+//!   absent (pointer 0, which every reader takes as empty). Maps have no links, level cameras or ambient sounds yet;
+//!   the host's cameras and sound instances index the host's pvar table and its occlusion mappings name the host's
+//!   instances;
+//! * spawn ids: an object whose template carries death bits (spawn id ≥ 0: its bolts and "broken" memory,
+//!   rc_game `set_death_bits`) gets the next free id and spawn flag 8 (created on every load, not again in the
+//!   same visit once dead), so templates from different levels never share bits;
 //! * grind paths (0x74): the map's rails;
 //! * level settings (0x00, in place): the death height (+0x28) and no loader ship (+0x2c x = 0).
 
@@ -17,6 +23,7 @@ use crate::{err, Result};
 use rc_formats::gameplay::{self, MobyInstance, MOBY_INSTANCES_POINTER, MOBY_INSTANCE_SIZE};
 
 pub const CAMERAS_POINTER: usize = 0x08;
+pub const SOUND_INSTANCES_POINTER: usize = 0x0c;
 pub const MOBY_GROUPS_POINTER: usize = 0x48;
 pub const GRIND_PATHS_POINTER: usize = 0x74;
 pub const OCCLUSION_MAPPINGS_POINTER: usize = 0x8c;
@@ -25,6 +32,9 @@ const SETTINGS_DEATH_Z: usize = 0x28;
 const SETTINGS_SHIP_X: usize = 0x2c;
 /// Grind path record size (`{f32 bsphere[4], s32 flag, pad[3]}`, rc_formats::volumes::parse_grind_paths).
 const GRIND_PATH_SIZE: usize = 0x20;
+/// Spawn flag 8 (rc_formats::moby_spawn::spawn_test): created unless this visit's death bit is set; unlike flags 0 it
+/// keeps the spawner byte 0xff, so `set_death_bits` runs (the bolt drop).
+const SPAWN_ONCE_PER_VISIT: i32 = 8;
 /// Extra radius around a rail's points in its bounding sphere (the rail search tests the sphere first).
 const RAIL_SPHERE_MARGIN: f32 = 4.0;
 
@@ -94,12 +104,15 @@ impl TemplateRecord {
         }
     }
 
-    /// Placed at `position` facing `yaw`: always spawned (no save-bit test), alone (no group), not snapped.
+    /// Placed at `position` facing `yaw`: always spawned (no save-bit test; [`patch_gameplay`] gives objects with
+    /// death bits their own), alone (no group), not snapped, in no mission of the source level.
     pub fn placed(mut self, position: [f32; 3], yaw: f32) -> TemplateRecord {
         let m = &mut self.instance;
         m.position = position;
         m.rotation = [0.0, 0.0, yaw];
         m.spawn_flags = 0;
+        // +0x04: the mission byte (moby+0xb0): the source level's missions mean nothing here (0xff = none).
+        m.unknown_4 = -1;
         m.group = -1;
         m.is_rooted = 0;
         // Never hidden by the occlusion grid (the host's grid does not know the map).
@@ -117,7 +130,19 @@ pub struct GameplayPatch {
     pub records: Vec<TemplateRecord>,
     /// Grind rails, each an open spline.
     pub rails: Vec<Vec<[f32; 3]>>,
+    /// Moby groups: per group, its members' record indices (each record's +0x48 is set to its group).
+    pub groups: Vec<Vec<u16>>,
+    /// The map's paths (each a spline's points; w = 0), appended after the host's splines: path `k` is spline
+    /// `host count + k` ([`patch_gameplay`] returns the first index), named by the records' pvars.
+    pub splines: Vec<Vec<[f32; 4]>>,
+    /// Cuboids appended after the host's (the objects' own trigger and post boxes from their home level, moved with
+    /// them): cuboid `k` is `host count + k`.
+    pub cuboids: Vec<rc_formats::volumes::Shape>,
     pub death_z: Option<f32>,
+    /// Level settings words written over the host's (the sky level's background colour and fog, the map's fog).
+    pub settings: Vec<(usize, u32)>,
+    /// Where the loader makes Ratchet's ship (position, yaw); None: no ship.
+    pub ship: Option<([f32; 3], f32)>,
 }
 
 /// A rail as the file's spline: `(x, y, z, w)` with w the chord to the next point (the last: back to the first),
@@ -155,6 +180,46 @@ fn grind_section(rails: &[Vec<[f32; 3]>]) -> Vec<u8> {
     s
 }
 
+/// The paths section (0x70, `rc_formats::gameplay::parse_splines`): `{count, data offset, data size, pad}`, the
+/// splines' offsets in the data, then each spline as `s32 count, pad[3]` and its points.
+fn paths_section(splines: &[Vec<[f32; 4]>]) -> Vec<u8> {
+    let mut data = Vec::new();
+    let mut offsets = Vec::new();
+    for s in splines {
+        offsets.push(data.len() as i32);
+        data.extend(words(&[s.len() as i32, 0, 0, 0]));
+        for p in s { for v in p { data.extend(v.to_le_bytes()); } }
+    }
+    let data_ofs = (0x10 + 4 * splines.len()).next_multiple_of(16);
+    let mut out = words(&[splines.len() as i32, data_ofs as i32, data.len() as i32, 0]);
+    out.extend(words(&offsets));
+    out.resize(data_ofs, 0);
+    out.extend(data);
+    out
+}
+
+/// The moby groups section (`InitLevelRenderGlobals` 0x255958 reads it): `s32 count, s32 data size, pad[2],
+/// s32 offset[count]` (−1: an empty group), then each group's u16 instance indices, the last with bit 15.
+fn groups_section(groups: &[Vec<u16>]) -> Vec<u8> {
+    let (mut offsets, mut data) = (Vec::new(), Vec::new());
+    for g in groups {
+        if g.is_empty() {
+            offsets.push(-1);
+            continue;
+        }
+        offsets.push(data.len() as i32);
+        for (k, &i) in g.iter().enumerate() {
+            let e = if k + 1 == g.len() { i | 0x8000 } else { i & 0x7fff };
+            data.extend(e.to_le_bytes());
+        }
+    }
+    data.resize(data.len().next_multiple_of(4), 0);
+    let mut s = words(&[groups.len() as i32, data.len() as i32, 0, 0]);
+    s.extend(words(&offsets));
+    s.extend(data);
+    s
+}
+
 /// The host's gameplay file `host` with `patch` in it (module doc).
 pub fn patch_gameplay(host: &[u8], patch: &GameplayPatch) -> Result<Vec<u8>> {
     let host_instances = rd(host, MOBY_INSTANCES_POINTER)? as usize;
@@ -165,10 +230,16 @@ pub fn patch_gameplay(host: &[u8], patch: &GameplayPatch) -> Result<Vec<u8>> {
     // Pvars: one block per record that has one, renumbered in record order.
     let (mut table, mut data, mut pointers) = (Vec::new(), Vec::new(), Vec::new());
     let mut records = Vec::with_capacity(patch.records.len() * MOBY_INSTANCE_SIZE);
-    for r in &patch.records {
+    let mut next_id = 0;
+    for (k, r) in patch.records.iter().enumerate() {
         let mut m = r.instance;
+        if let Some(g) = patch.groups.iter().position(|g| g.contains(&(k as u16))) { m.group = g as i32; }
         m.size = MOBY_INSTANCE_SIZE as i32;
         m.pvar_index = -1;
+        if m.o_class != 0 && m.spawn_id >= 0 {
+            (m.spawn_id, m.spawn_flags) = (next_id, SPAWN_ONCE_PER_VISIT);
+            next_id += 1;
+        }
         if let Some(b) = &r.pvar {
             let index = (table.len() / 2) as i32;
             data.resize(data.len().next_multiple_of(16), 0);
@@ -189,17 +260,42 @@ pub fn patch_gameplay(host: &[u8], patch: &GameplayPatch) -> Result<Vec<u8>> {
     let p = if pointers.is_empty() { 0 } else { pointers.extend([-1, 0]); append(&mut out, &words(&pointers)) };
     wr(&mut out, gameplay::PVAR_POINTER_FIXUPS_POINTER, p as i32);
 
-    for ptr in [gameplay::PVAR_MOBY_LINK_FIXUPS_POINTER, gameplay::PVAR_SHARED_DATA_POINTER, MOBY_GROUPS_POINTER, CAMERAS_POINTER, OCCLUSION_MAPPINGS_POINTER] {
+    for ptr in [gameplay::PVAR_MOBY_LINK_FIXUPS_POINTER, gameplay::PVAR_SHARED_DATA_POINTER, CAMERAS_POINTER, SOUND_INSTANCES_POINTER, OCCLUSION_MAPPINGS_POINTER] {
         wr(&mut out, ptr, 0);
     }
+    let g = if patch.groups.iter().all(|g| g.is_empty()) { 0 } else { append(&mut out, &groups_section(&patch.groups)) };
+    wr(&mut out, MOBY_GROUPS_POINTER, g as i32);
     let g = if patch.rails.is_empty() { 0 } else { append(&mut out, &grind_section(&patch.rails)) };
     wr(&mut out, GRIND_PATHS_POINTER, g as i32);
+    if !patch.splines.is_empty() {
+        let mut all = gameplay::parse_splines(host).map_err(|e| crate::MapError(format!("host paths: {e}")))?;
+        all.extend(patch.splines.iter().cloned());
+        let at = append(&mut out, &paths_section(&all));
+        wr(&mut out, gameplay::PATHS_POINTER, at as i32);
+    }
+    if !patch.cuboids.is_empty() {
+        // The host's cuboids then the map's, as a new section (host indices keep their meaning).
+        let mut all = rc_formats::volumes::parse_volumes(host).map_err(|e| crate::MapError(format!("host volumes: {e}")))?.cuboids;
+        all.extend(patch.cuboids.iter().copied());
+        let mut s = words(&[all.len() as i32, 0, 0, 0]);
+        for c in &all { s.extend_from_slice(bytemuck::bytes_of(c)); }
+        let at = append(&mut out, &s);
+        wr(&mut out, rc_formats::volumes::CUBOIDS_POINTER, at as i32);
+    }
 
     let settings = rd(host, gameplay::LEVEL_SETTINGS_POINTER)? as usize;
     if settings == 0 { return err("the host level has no level settings"); }
     rd(host, settings + SETTINGS_SHIP_X)?;
     if let Some(z) = patch.death_z { wr(&mut out, settings + SETTINGS_DEATH_Z, z.to_bits() as i32); }
-    wr(&mut out, settings + SETTINGS_SHIP_X, 0);
+    for &(o, v) in &patch.settings { if o < SETTINGS_DEATH_Z { wr(&mut out, settings + o, v as i32); } }
+    // The host's fog zones sit where its own level is: none on a map.
+    wr(&mut out, gameplay::FOG_ZONES_POINTER, 0);
+    match patch.ship {
+        Some((p, yaw)) => {
+            for (k, v) in [p[0], p[1], p[2], yaw].into_iter().enumerate() { wr(&mut out, settings + SETTINGS_SHIP_X + 4 * k, v.to_bits() as i32); }
+        }
+        None => wr(&mut out, settings + SETTINGS_SHIP_X, 0),
+    }
     out.resize(out.len().next_multiple_of(16), 0);
     Ok(out)
 }
@@ -254,12 +350,15 @@ mod tests {
         let a = TemplateRecord::first_of_class(&h, 500).unwrap().placed([21.0, 30.0, 40.0], 0.0);
         let b = TemplateRecord::first_of_class(&h, 500).unwrap().placed([22.0, 30.0, 40.0], 0.0);
         let rail = vec![[10.0, 10.0, 41.0], [13.0, 14.0, 41.0], [13.0, 20.0, 45.0]];
-        let p = GameplayPatch { records: vec![ratchet, a, b], rails: vec![rail.clone()], death_z: Some(30.0) };
+        let p = GameplayPatch { records: vec![ratchet, a, b], rails: vec![rail.clone()], groups: vec![vec![], vec![1, 2]], splines: vec![vec![[1.0, 2.0, 3.0, 0.0], [4.0, 5.0, 6.0, -1.0]]], cuboids: Vec::new(), settings: Vec::new(), ship: None, death_z: Some(30.0) };
         let g = patch_gameplay(&h, &p).unwrap();
         // The host's bytes up to its end are kept apart from the moved pointers and the level settings.
         assert_eq!(&g[0x2c0..0x400], &h[0x2c0..0x400]);
         let inst = gameplay::parse_moby_instances(&g).unwrap();
         assert_eq!(inst.iter().map(|m| (m.o_class, m.pvar_index, m.position[0])).collect::<Vec<_>>(), vec![(0, -1, 20.0), (500, 0, 21.0), (500, 1, 22.0)]);
+        // Ratchet keeps his record's spawn fields; the two crates get their own death bits.
+        assert_eq!(inst.iter().map(|m| (m.spawn_id, m.spawn_flags)).collect::<Vec<_>>(), vec![(0, 0), (0, 8), (1, 8)]);
+        assert_eq!(rd(&g, SOUND_INSTANCES_POINTER).unwrap(), 0);
         assert_eq!(rd(&g, rd(&g, MOBY_INSTANCES_POINTER).unwrap() as usize + 4).unwrap(), 7);
         let pv = gameplay::parse_pvars(&g).unwrap();
         assert_eq!(pv.len(), 2);
@@ -275,6 +374,14 @@ mod tests {
         assert_eq!(gameplay::ship_placement(&g).unwrap(), None);
         assert_eq!(f32::from_bits(rd(&g, 0x128).unwrap() as u32), 30.0);
         assert!(gameplay::sections(&g).is_ok());
+        // The map's path after the host's (the test host has none).
+        assert_eq!(gameplay::parse_splines(&g).unwrap(), vec![vec![[1.0, 2.0, 3.0, 0.0], [4.0, 5.0, 6.0, -1.0]]]);
+        // The crates are group 1 (group 0 is empty): their records say so and the section lists them.
+        assert_eq!(inst.iter().map(|m| m.group).collect::<Vec<_>>(), vec![-1, 1, 1]);
+        let s = rd(&g, MOBY_GROUPS_POINTER).unwrap() as usize;
+        assert_eq!((rd(&g, s).unwrap(), rd(&g, s + 0x10).unwrap(), rd(&g, s + 0x14).unwrap()), (2, -1, 0));
+        let d = s + 0x18;
+        assert_eq!((u16::from_le_bytes([g[d], g[d + 1]]), u16::from_le_bytes([g[d + 2], g[d + 3]])), (1, 0x8002));
     }
 
     fn rc_formats_dist(s: [f32; 4], p: [f32; 4]) -> f32 { ((s[0] - p[0]).powi(2) + (s[1] - p[1]).powi(2) + (s[2] - p[2]).powi(2)).sqrt() }

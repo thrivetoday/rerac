@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAC Maker Catalog</title>
+<style>
+  :root {
+    --bg: #131c2e; --panel: #1b2740; --panel2: #22314f; --line: #2f4268;
+    --text: #e8eef9; --muted: #9db0d0; --accent: #f08a24; --accent2: #ffb347;
+    --good: #5fd48a; --warn: #f2c94c; --bad: #ef6b6b; --static: #8fa4c8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: linear-gradient(180deg, #1e2b47, #18233a); border-bottom: 2px solid var(--accent); padding: 12px 16px 10px; }
+  h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: .06em; text-transform: uppercase; }
+  h1 span { color: var(--accent); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tab { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+  .tab.on { background: var(--accent); color: #1a1205; border-color: var(--accent2); }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=search], select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font: inherit; }
+  input[type=search] { flex: 1 1 220px; min-width: 0; }
+  label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .count { color: var(--muted); margin-left: auto; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; padding: 14px 16px 40px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .card:hover, .card.sel { border-color: var(--accent); }
+  .thumb { width: 100%; aspect-ratio: 1; background: radial-gradient(circle at 50% 40%, #2c3d62, #182238); border-radius: 4px; display: grid; place-items: center; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
+  .thumb .none { color: var(--muted); font-size: 11px; text-align: center; padding: 8px; }
+  .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 3px; padding: 1px 6px; color: #10151f; }
+  .b-ported { background: var(--good); } .b-static { background: var(--static); } .b-unported { background: var(--bad); }
+  .b-live { background: var(--good); } .b-needs { background: var(--warn); } .b-prop { background: var(--static); }
+  .b-gear { background: var(--accent2); } .b-pickups { background: #7fd3f5; }
+  details.legend { margin-top: 8px; color: var(--muted); }
+  details.legend summary { cursor: pointer; color: var(--text); }
+  details.legend dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; margin: 8px 0 0; max-width: 900px; }
+  details.legend dd { margin: 0; }
+  aside { position: fixed; right: 0; top: 0; bottom: 0; width: min(380px, 100%); background: var(--panel); border-left: 2px solid var(--accent); padding: 16px; overflow: auto; transform: translateX(100%); transition: transform .15s; z-index: 3; }
+  aside.open { transform: none; }
+  aside img { width: 100%; max-width: 288px; display: block; margin: 0 auto 10px; background: radial-gradient(circle at 50% 40%, #2c3d62, #182238); border-radius: 6px; }
+  aside h2 { margin: 0 0 4px; font-size: 18px; }
+  aside dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 10px 0; }
+  aside dt { color: var(--muted); }
+  aside dd { margin: 0; word-break: break-word; }
+  aside code { background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+  .close { float: right; background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; }
+  @media (max-width: 600px) { main { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); padding: 10px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>RAC Maker <span>Catalog</span></h1>
+  <div class="tabs" id="tabs"></div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Search names, ids, descriptions…">
+    <select id="level"><option value="">All planets</option></select>
+    <select id="status"><option value="">Any status</option></select>
+    <select id="group"><option value="">Any group</option><option value="gear">Ratchet &amp; gear</option><option value="pickups">Crates &amp; pickups</option><option value="other">Everything else</option></select>
+    <label><input type="checkbox" id="placed"> Placed in the game</label>
+    <label><input type="checkbox" id="thumbed" checked> With a picture</label>
+    <span class="count" id="count"></span>
+  </div>
+  <details class="legend"><summary>What do the badges mean?</summary><dl id="legend"></dl></details>
+</header>
+<main id="grid"></main>
+<aside id="detail"></aside>
+<script>
+/*CATALOG*/
+const KINDS = [["all", "All"], ["moby", "Objects & enemies"], ["tie", "Building pieces"], ["shrub", "Plants & details"], ["sky", "Skies"], ["tfrag-tex", "Terrain textures"]];
+const LEVELS = CATALOG.levels;
+const STATUS = {
+  live: ["Live", "b-live", "Tested: placed on a test map next to Ratchet, it ran its behaviour for 10 seconds without reaching unported code or crashing. Ready to place in a map."],
+  "needs-work": ["Needs work", "b-needs", "Tested and failed: it reached unported code, crashed, or stalled the map. The detail panel says which."],
+  ported: ["Ported", "b-ported", "ReRAC has its behaviour code, but it was not spawn-tested (the game never places it by itself: shots, pieces and other things objects create)."],
+  static: ["Scenery", "b-static", "The game gives it no behaviour code: it stands and plays its animation. Decoration, or a part another object moves."],
+  unported: ["Unported", "b-unported", "It has behaviour code in the original game that ReRAC has not rewritten yet."],
+};
+const GROUPS = {
+  gear: ["Ratchet's gear", "b-gear", "Ratchet, Clank, his ship, and the models of his weapons, gadgets, boots, helmets and packs. The hero code holds or wears them: you give them to Ratchet in a map's loadout, you do not place them."],
+  pickups: ["Pickup", "b-pickups", "Crates, bolts and pickups."],
+};
+const parse = id => { const [g, l, k, n] = id.split("/"); return { level: +l.slice(1), kind: k, number: +n }; };
+const entries = CATALOG.entries.map(e => ({ ...e, p: parse(e.id), status: e.live || e.behaviour || "" }));
+let kind = "moby", sel = null;
+const $ = id => document.getElementById(id);
+const levelsOf = e => [e.id, ...(e.also || [])].map(i => parse(i).level);
+function title(e) {
+  if (e.name) return e.name.replace(/^./, c => c.toUpperCase());
+  return `${LEVELS[e.p.level]} ${e.p.kind === "tfrag-tex" ? "texture" : e.p.kind} ${e.p.number}`;
+}
+function tabs() {
+  $("tabs").innerHTML = "";
+  for (const [k, label] of KINDS) {
+    const b = document.createElement("button");
+    b.className = "tab" + (k === kind ? " on" : "");
+    b.textContent = `${label} (${entries.filter(e => k === "all" || e.p.kind === k).length})`;
+    b.onclick = () => { kind = k; tabs(); draw(); };
+    $("tabs").appendChild(b);
+  }
+}
+LEVELS.forEach((n, i) => $("level").add(new Option(`${String(i).padStart(2, "0")} ${n}`, i)));
+Object.entries(STATUS).forEach(([k, v]) => $("status").add(new Option(v[0], k)));
+function badge(e) {
+  const b = ([n, c, d]) => `<span class="badge ${c}" title="${d}">${n}</span> `;
+  return (GROUPS[e.group] ? b(GROUPS[e.group]) : "") + (STATUS[e.status] ? b(STATUS[e.status]) : "");
+}
+function draw() {
+  const q = $("q").value.trim().toLowerCase(), lv = $("level").value, st = $("status").value, gr = $("group").value;
+  const list = entries.filter(e => (kind === "all" || e.p.kind === kind)
+    && (!gr || (gr === "other" ? !e.group : e.group === gr))
+    && (!lv || levelsOf(e).includes(+lv))
+    && (!st || e.status === st)
+    && (!$("placed").checked || e.placed > 0)
+    && (!$("thumbed").checked || e.thumb)
+    && (!q || [e.id, e.name, e.about, e.port, ...(e.tags || []), ...(e.also || [])].some(s => s && s.toLowerCase().includes(q))));
+  $("count").textContent = `${list.length} shown`;
+  const frag = document.createDocumentFragment();
+  for (const e of list.slice(0, 1500)) {
+    const c = document.createElement("div");
+    c.className = "card" + (e === sel ? " sel" : "");
+    const n = levelsOf(e).length;
+    c.innerHTML = `<div class="thumb">${e.thumb ? `<img loading="lazy" src="${e.thumb}" alt="">` : `<div class="none">no model</div>`}</div>
+      <div class="name" title="${title(e)}">${title(e)}</div>
+      <div class="sub">${LEVELS[e.p.level]}${n > 1 ? ` +${n - 1}` : ""} · #${e.p.number}</div>
+      <div>${badge(e)}</div>`;
+    c.onclick = () => { sel = e; detail(e); draw(); };
+    frag.appendChild(c);
+  }
+  $("grid").replaceChildren(frag);
+}
+function detail(e) {
+  const ids = [e.id, ...(e.also || [])];
+  $("detail").innerHTML = `<button class="close" onclick="document.getElementById('detail').classList.remove('open')">×</button>
+    ${e.thumb ? `<img src="${e.thumb}" alt="">` : ""}
+    <h2>${title(e)}</h2><div>${badge(e)}</div>
+    ${e.about ? `<p>${e.about}</p>` : ""}
+    <dl>
+      <dt>Asset id</dt><dd><code>${e.id}</code></dd>
+      <dt>Planets</dt><dd>${[...new Set(ids.map(i => LEVELS[parse(i).level]))].join(", ")}</dd>
+      <dt>Placed</dt><dd>${e.placed} in the game's levels</dd>
+      ${e.port ? `<dt>Port</dt><dd>${e.port}</dd>` : ""}
+      ${e.live_note ? `<dt>Spawn test</dt><dd>${e.live_note}</dd>` : ""}
+      ${e.joints ? `<dt>Joints</dt><dd>${e.joints}</dd>` : ""}
+      ${e.sequences ? `<dt>Animations</dt><dd>${e.sequences}</dd>` : ""}
+      ${e.textures ? `<dt>Textures</dt><dd>${e.textures}</dd>` : ""}
+      ${e.tags ? `<dt>Tags</dt><dd>${e.tags.join(", ")}</dd>` : ""}
+      ${ids.length > 1 ? `<dt>Also as</dt><dd>${ids.slice(1).map(i => `<code>${i}</code>`).join(" ")}</dd>` : ""}
+    </dl>`;
+  $("detail").classList.add("open");
+}
+["q", "level", "status", "group", "placed", "thumbed"].forEach(id => $(id).addEventListener("input", draw));
+$("legend").innerHTML = [...Object.values(STATUS), ...Object.values(GROUPS)].map(([n, c, d]) => `<dt><span class="badge ${c}">${n}</span></dt><dd>${d}</dd>`).join("");
+tabs(); draw();
+</script>
+</body>
+</html>

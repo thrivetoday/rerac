@@ -23,6 +23,12 @@ rc-game = { path = "../rc-game" }
 rc-game2 = { path = "../rc-game2" }
 # Decompressed lumps through the Tier 1 engine cache (once per process).
 rc-data = { path = "../rc-data" }
+# RAC Maker maps (`--map`, crate::map_load).
+rc-map = { path = "../rc-map" }
+# The catalog's thumbnails (rc_extract::thumbs) and their PNG encoder (crate::catalog).
+rc-extract = { path = "../rc-extract" }
+# The RAC Maker editor's panels (crate::editor; the user chose egui, 2026-10-22). Rendering and fonts only.
+bevy_egui = { version = "0.42", default-features = false, features = ["render", "default_fonts"] }
 # The movies (FMV): MPEG-2 video decoder and PSS player core, ours (docs/formats/pss.md).
 rc-video = { path = "../rc-video" }
 anyhow.workspace = true

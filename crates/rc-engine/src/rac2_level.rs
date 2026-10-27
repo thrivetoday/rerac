@@ -80,7 +80,7 @@ pub fn load(root: &Path, index: u32) -> Result<LoadedLevel> {
     let shrubs = crate::shrub_render::load_shrubs(&core, &core_data, gs_ram, &gameplay, &textures).context("loading shrubs")?;
     let sky = crate::sky_render::load(&core, &core_data, index).context("loading the sky")?;
     let mut textures = textures;
-    let mut mobys = crate::moby_render::load_mobys_with_gs(root, &core, &core_data, &gameplay, gs_ram, collision.as_ref()).context("loading mobys")?;
+    let mut mobys = crate::moby_render::load_mobys_with_gs(root, &core, &core_data, &gameplay, gs_ram, collision.as_ref(), Vec::new()).context("loading mobys")?;
     if let Err(e) = attach_ratchet(root, &core, &mut mobys, &mut textures, 0) { eprintln!("rac2: Ratchet's armour not attached ({e:#}); he has no mesh"); }
     let occlusion = crate::occlusion::load(&core, &core_data, &gameplay, &tfrags, &ties.instances, &mobys.instances).context("loading occlusion")?;
     let particles = crate::particle_render::LevelParticles {

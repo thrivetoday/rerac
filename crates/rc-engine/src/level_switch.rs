@@ -68,7 +68,9 @@ pub struct LevelBundle {
 /// Loads level `index` (its data, the loader's moby spawn pass, the fog zones): the one load path of the boot and of
 /// every change.
 pub fn load_bundle(root: &std::path::Path, index: u32, save: &rc_formats::moby_spawn::SpawnSave) -> anyhow::Result<LevelBundle> {
+    let t0 = std::time::Instant::now();
     let mut level = crate::level_load::load_level(root, index)?;
+    let t1 = t0.elapsed().as_secs_f64();
     if crate::disc_source::game(root) == crate::disc_source::Game::Rac2 {
         // Going Commando: no load-pass spawn rules (no mobys yet) and no fog zones (its section is not mapped yet).
         let spawn = crate::moby_spawn::MobySpawn { enabled: false, states: Vec::new(), ship: None };
@@ -77,7 +79,9 @@ pub fn load_bundle(root: &std::path::Path, index: u32, save: &rc_formats::moby_s
         return Ok(LevelBundle { index, level, spawn, fog });
     }
     let spawn = crate::moby_spawn::apply_load_pass(root, index, &mut level, save)?;
-    let fog = crate::fog_state::FogState::new(crate::fog_state::load(root, index)?, &level.fog);
+    let t2 = t0.elapsed().as_secs_f64();
+    let fog = crate::fog_state::FogState::new(crate::fog_state::load(&level.gameplay, level.collision.clone())?, &level.fog);
+    println!("level switch: level {index:02} loaded in {:.2} s (level data {t1:.2} s, load pass {:.2} s, fog {:.2} s)", t0.elapsed().as_secs_f64(), t2 - t1, t0.elapsed().as_secs_f64() - t2);
     Ok(LevelBundle { index, level, spawn, fog })
 }
 
@@ -87,6 +91,8 @@ pub struct LevelChange {
     load: Option<Load>,
     /// The swap was asked for: done at the end of the frame once the load is ready.
     swap: bool,
+    /// The last load that failed (the old level stayed), for the editor (crate::editor) to report.
+    pub last_error: Option<String>,
 }
 
 struct Load {
@@ -126,6 +132,9 @@ impl LevelChange {
 
     /// The new overlay's `entry`: swap at the end of this frame (the load must be done).
     pub fn swap(&mut self) { self.swap = true; }
+
+    /// No load is running or waiting for its swap.
+    pub fn idle(&self) -> bool { self.load.is_none() }
 }
 
 /// [`LevelUnload`]: remove resource `T` (the lazy set-up re-creates it).
@@ -165,6 +174,7 @@ fn apply_switch(world: &mut World) {
         Err(e) => {
             // The game has no failure path (the disc read retries forever): the port stays on the old level.
             eprintln!("level switch: level {:02} not loaded ({e:#}); staying on level {:02}", load.index, crate::level_load::level_index());
+            world.resource_mut::<LevelChange>().last_error = Some(format!("{e:#}"));
             return;
         }
     };
@@ -176,7 +186,12 @@ fn apply_switch(world: &mut World) {
     crate::level_load::set_level_index(index);
     rc_data::global().forget_level(&crate::level_load::extracted_root(), old);
     if let Some(data) = level.audio.take() {
-        if let Some(mut out) = world.get_resource_mut::<crate::audio_out::AudioOut>() { out.swap_level(data); }
+        // RAC Maker's editor reloads the level on every edit: the sound data waits for play (the music goes on).
+        if world.get_resource::<crate::editor::EditorMode>().is_some_and(|m| *m == crate::editor::EditorMode::Editing) {
+            world.insert_resource(crate::audio_out::HeldLevelAudio(Some(data)));
+        } else if let Some(mut out) = world.get_resource_mut::<crate::audio_out::AudioOut>() {
+            out.swap_level(data);
+        }
     }
     let bg = level.background;
     world.insert_resource(crate::game_camera::GameFog::new(level.fog, rc_game::fog_zones::PARTICLE_FAR12));

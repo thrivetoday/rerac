@@ -129,7 +129,17 @@ pub fn load(root: &Path, index: u32, gameplay: &[u8]) -> Result<LevelWater> {
             .or_insert_with(|| crate::disc_source::level_file(root, l, "overlay.bin").ok().and_then(|b| LevelOverlay::parse(&b).ok()).map(Arc::new))
             .clone()
     };
-    let data = match LevelWaterData::load(&ov_bytes, &target, &reference, gameplay) {
+    // The code-matched part is the level's overlay's: worked out once per level (seconds of relocations), only the
+    // gameplay file's part read again (a RAC Maker map reloads its level on every edit).
+    static FROM_OVERLAY: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<u32, LevelWaterData>>> = std::sync::OnceLock::new();
+    let kept = FROM_OVERLAY.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner()).get(&index).cloned();
+    let from_overlay = match kept {
+        Some(d) => Ok(d),
+        None => LevelWaterData::from_overlay(&ov_bytes, &target, &reference).inspect(|d| {
+            FROM_OVERLAY.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner()).insert(index, d.clone());
+        }),
+    };
+    let data = match from_overlay.and_then(|mut d| d.read_gameplay(gameplay).map(|_| d)) {
         Ok(d) => Some(d),
         Err(e) => {
             eprintln!("water: level water data not read ({e}): no water managers");

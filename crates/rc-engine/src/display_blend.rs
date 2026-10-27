@@ -231,16 +231,25 @@ fn prepare_targets(
 
 /// Takes the view's effect items out of its `Transparent3d` phase (in order), before the transparent pass.
 fn split_effects(
-    view: ViewQuery<&ExtractedView>,
+    view: ViewQuery<(&ExtractedView, &ViewTarget)>,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     set: Res<EffectEntities>,
     stash: Res<EffectStash>,
+    cache: Res<PipelineCache>,
 ) {
     let view_entity = view.entity();
-    let ev = view.into_inner();
-    if set.0.is_empty() { return; }
+    let (ev, target) = view.into_inner();
+    let by_pipeline = target.main_texture_format() != EFFECT_FORMAT;
     let Some(phase) = phases.get_mut(&ev.retained_view_entity) else { return };
-    let keys: Vec<_> = phase.items.keys().filter(|k| set.0.contains(&k.1)).copied().collect();
+    // An effect item: its entity is a [`DisplayEffect`] this frame, or its pipeline targets the effect format. The
+    // second catches an item whose entity the frame's set has not caught up with (around a level swap, an effect
+    // item can outlive its entity's extraction by a frame); drawn in the main pass it would fail validation.
+    let effect_pipeline = |item: &Transparent3d| {
+        by_pipeline
+            && matches!(cache.get_render_pipeline_state(item.pipeline), bevy::render::render_resource::CachedPipelineState::Ok(_))
+            && cache.get_render_pipeline_descriptor(item.pipeline).fragment.as_ref().is_some_and(|f| f.targets.iter().flatten().any(|t| t.format == EFFECT_FORMAT))
+    };
+    let keys: Vec<_> = phase.items.iter().filter(|(k, item)| set.0.contains(&k.1) || effect_pipeline(item)).map(|(k, _)| *k).collect();
     if keys.is_empty() { return; }
     let mut out = SortedRenderPhase::<Transparent3d>::default();
     for k in keys {

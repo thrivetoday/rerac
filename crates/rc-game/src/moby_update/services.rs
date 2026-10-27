@@ -32,6 +32,10 @@ use rc_formats::moby_anim::{MobyAnimClass, MobyFrame};
 use rc_formats::moby_collision::MobyCollision;
 use std::sync::{Arc, Mutex};
 
+/// RAC Maker maps (set by the engine while one plays): `World::create_moby` of a class the level lacks (a shot or
+/// piece of an imported enemy that could not come with it) makes nothing.
+pub static SKIP_MISSING_CLASSES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 // ---------------------------------------------------------------------------------------------------
 // Constants and small conversions
 
@@ -820,6 +824,12 @@ pub struct FxStats {
     /// Class states / branches the ported updates reached but do not port (combat, teleports, dialogs …), by
     /// name ([`Services::unported`]).
     pub unported: std::collections::BTreeMap<&'static str, u64>,
+    /// Per class: the updates run ([`crate::moby_update::scheduler::run_moby`]) and the unported calls met while its
+    /// update ran (the RAC Maker spawn test reads them, rc-engine `spawn_test`).
+    pub class_runs: HashMap<i16, u64>,
+    pub class_unported: HashMap<i16, std::collections::BTreeMap<&'static str, u64>>,
+    /// The class whose update is running.
+    pub running: Option<i16>,
 }
 
 /// State the moby system keeps between ticks (the game's globals it owns).
@@ -1088,7 +1098,10 @@ impl Services {
     }
 
     /// Counts a reached-but-unported state or branch of a ported class (the stats line / trace report).
-    pub fn unported(&mut self, what: &'static str) { *self.fx.unported.entry(what).or_default() += 1; }
+    pub fn unported(&mut self, what: &'static str) {
+        *self.fx.unported.entry(what).or_default() += 1;
+        if let Some(c) = self.fx.running { *self.fx.class_unported.entry(c).or_default().entry(what).or_default() += 1; }
+    }
 
     /// The class collision blobs of the level (`rc_formats::moby_collision::parse_level`).
     pub fn set_moby_collision(&mut self, blobs: Vec<(i32, MobyCollision)>) {
@@ -1816,9 +1829,11 @@ impl<'a> World<'a> {
 
     /// `CreateMoby(o_class)` 0x263390 with the class as loaded (the game's init defaults, a zeroed 0x80-byte
     /// pvar block); decrements the free-slot count (`MobyTable::free_slots`, in [`MobyTable::create`]). The
-    /// snapshot slot of the new moby is cleared.
+    /// snapshot slot of the new moby is cleared. On a RAC Maker map ([`SKIP_MISSING_CLASSES`]) a class the level
+    /// does not have makes nothing (else the moby would sit hidden in its slot for ever).
     pub fn create_moby(&mut self, o_class: i16) -> Option<MobyId> {
         let info = self.classes.info(o_class);
+        if info.is_none() && SKIP_MISSING_CLASSES.load(std::sync::atomic::Ordering::Relaxed) { return None; }
         let id = self.table.create(o_class, info.as_ref(), self.counter)?;
         crate::moby_update::anim_sound::init(&mut self.table.mobys[id], self.classes.anim(o_class));
         if self.svc.snapshots.len() <= id { self.svc.snapshots.resize(id + 1, None); }

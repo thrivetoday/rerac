@@ -554,6 +554,18 @@ impl LevelPorts {
         LevelPorts { table, external }
     }
 
+    /// A class brought in from another level (a RAC Maker map's import, docs/plan/rac_maker.md): `o_class` runs here what
+    /// its own level's table runs for it (`source`: that level's ports), whatever this level's table says. The class
+    /// numbers of the two levels must not clash (the map loader checks it).
+    pub fn import(&mut self, o_class: i16, source: &LevelPorts) {
+        let entry = source.table.get(&o_class).copied().unwrap_or((0, for_class(o_class)));
+        self.table.insert(o_class, entry);
+        match source.external.get(&o_class) {
+            Some(&a) => { self.external.insert(o_class, a); }
+            None => { self.external.remove(&o_class); }
+        }
+    }
+
     /// The port that runs `o_class` on this level.
     pub fn get(&self, o_class: i16) -> Option<ClassUpdate> {
         // The player's ship: `InitLevelRenderGlobals` 0x255958 installs `ShipUpdate` 0x2a1c40 on the ship it creates

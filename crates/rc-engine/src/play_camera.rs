@@ -39,13 +39,25 @@ pub fn apply(
     let aspect = display.aspect;
     let (Some(view), Some(source)) = (view, source) else { return };
     if *source != CameraSource::Play { return; }
-    let t = view_transform(&view.view);
+    let mut t = view_transform(&view.view);
+    // A RAC Maker camera zone (crate::map_logic): the view at the zone's eye looking at Ratchet, blended in and out.
+    if let Some((eye, at, k)) = crate::map_logic::camera(hero_point(&view.view)) {
+        let fixed = Transform::from_translation(game_to_bevy(eye)).looking_at(game_to_bevy(at), Vec3::Y);
+        let k = k * k * (3.0 - 2.0 * k);
+        t = Transform { translation: t.translation.lerp(fixed.translation, k), rotation: t.rotation.slerp(fixed.rotation, k), scale: t.scale };
+    }
     for (mut tf, mut proj) in &mut cams {
         if *tf != t { *tf = t; }
         // The FOV hook: the game's tangent (Hor+ in 16:9, crate::display); only touched when it changes.
         crate::display::set_view_tans(&mut proj, view.tan_half_fov, aspect);
         crate::game_camera::set_view_far(&mut proj, view.far);
     }
+}
+
+/// Where the camera looks: the follow camera's focus (about 4.6 ahead of its eye along its forward row, Ratchet).
+fn hero_point(v: &CameraView) -> [f32; 3] {
+    let (p, [f, _, _]) = (v.pos_f32(), v.rows_f32());
+    [p[0] + f[0] * 4.6, p[1] + f[1] * 4.6, p[2] + f[2] * 4.6 - 1.0]
 }
 
 /// The default tangent (`0x16cf70`).

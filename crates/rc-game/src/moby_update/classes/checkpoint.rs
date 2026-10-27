@@ -103,6 +103,10 @@ pub fn update(w: &mut World, id: MobyId) {
     if w.m(id).state == 0 && w.mission_done(level, w.m(id).mission) == 0xff { w.mm(id).state = 1; }
 }
 
+/// The checkpoint recorded at `pos` facing `rot` as class 805 does (RAC Maker's checkpoint zones, rc-engine
+/// `map_logic`).
+pub fn record_at(w: &mut World, pos: [f32; 3], rot: [f32; 3]) { record(w, Record { pos, rot }); }
+
 /// `FUN_0029ac10(point, euler)`: this visit's kills whose mission is done become permanent, and the record.
 pub(crate) fn record(w: &mut World, r: Record) {
     let level = w.svc.level;

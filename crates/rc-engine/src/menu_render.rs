@@ -241,7 +241,7 @@ impl Plugin for MenuPlugin {
             .add_systems(FixedUpdate, crate::saves::card_frame.after(menu_frame))
             .add_systems(FixedUpdate, map_trace.after(menu_frame))
             .add_systems(FixedUpdate, return_page_reopen.before(crate::gameplay::GameTick))
-            .add_systems(Update, (target_main_camera, build_prims).chain().in_set(MenuPrims).before(HudBuild))
+            .add_systems(Update, (leave_for_editor, target_main_camera, build_prims).chain().in_set(MenuPrims).before(HudBuild))
             .add_systems(PostUpdate, menu_layer.before(TransformSystems::Propagate).in_set(crate::display::ResizeTargets))
             .add_systems(PostUpdate, crate::interact_render::hide_hero.after(crate::moby_render::update_moby_occlusion).before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate));
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
@@ -446,6 +446,32 @@ fn setup(
 
 /// Class 0x472 (index into the level's moby classes) and its corner chains: the joint lists named at
 /// 0x161fe0, read from the class blob in the level core.
+/// RAC Maker's Stop (crate::editor) while a game menu was open: the menu's pad input stops with the play camera and
+/// the tick freezes, so it could never close. [`request_leave`] puts the modes back to gameplay (the level reload that
+/// follows drops the menu's own state).
+static LEAVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Leave any game menu, card dialog, slideshow or fade on the next frame ([`LEAVE`]).
+pub fn request_leave() { LEAVE.store(true, std::sync::atomic::Ordering::Relaxed); }
+
+fn leave_for_editor(mut mm: ResMut<MenuMode>, rt: Option<ResMut<MenuRt>>, play: Option<ResMut<Play>>) {
+    if !LEAVE.swap(false, std::sync::atomic::Ordering::Relaxed) { return; }
+    if mm.state.mode != Mode::Gameplay { println!("menus: left mode {:?} for the editor", mm.state.mode); }
+    mm.state.set(Mode::Gameplay);
+    mm.world_tick = false;
+    if let Some(mut rt) = rt {
+        rt.render_mode = Mode::Gameplay;
+        rt.post_fade = None;
+        rt.slides = None;
+        rt.freeze = None;
+        rt.snapshot_request = false;
+        rt.reopened = false;
+    }
+    if let Some(mut play) = play {
+        if matches!(play.svc.game_mode, 3 | 7) { play.svc.game_mode = 0; }
+    }
+}
+
 fn load_frame_class(level: &crate::level_load::LoadedLevel, ov: &Overlay) -> anyhow::Result<(FrameClass, usize)> {
     let m = &level.mobys;
     let ci = m.classes.iter().position(|c| c.o_class == frame::O_CLASS).ok_or_else(|| anyhow!("class {:#x} is not on this level", frame::O_CLASS))?;

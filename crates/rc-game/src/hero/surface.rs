@@ -136,10 +136,18 @@ pub const LEVEL_RULES: [SurfaceRules; 19] = [
     r(&[0, 2, 3, 4, 8, 9, 0xb, 0xc, 0xe], true, false),
 ];
 
+/// A custom map is loaded (RAC Maker): every surface rule applies, whatever the host level's own build handles (its
+/// terrain may be slippery, hot, deadly or magnetic on any host).
+static FULL_RULES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set at each level load: on for a custom map, off for the game's own levels.
+pub fn set_full_rules(on: bool) { FULL_RULES.store(on, std::sync::atomic::Ordering::Relaxed); }
+
 /// The rules of level `level` (0x15ed84, `Idle::level`, set by the engine at the level load). An unknown level
 /// (−1: the unit tests and the headless Novalis runs) keeps level01's rules, the build the ported hero code comes
 /// from (the hand-built test floors are surface 1, which level01 ignores); above 18 the superset.
 pub fn rules(level: i32) -> SurfaceRules {
+    if FULL_RULES.load(std::sync::atomic::Ordering::Relaxed) { return SUPERSET; }
     if level < 0 { return NOVALIS; }
     usize::try_from(level).ok().and_then(|i| LEVEL_RULES.get(i)).copied().unwrap_or(SUPERSET)
 }

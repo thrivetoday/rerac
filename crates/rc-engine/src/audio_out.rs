@@ -51,6 +51,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+/// RAC Maker's editor: the sound data of a level loaded while editing, held back (its reloads come with every edit;
+/// swapping would restart the music) until play starts (crate::editor `radio`).
+#[derive(Resource, Default)]
+pub struct HeldLevelAudio(pub Option<LevelAudio>);
+
 /// `RC_AUDIO` is not "0".
 pub fn enabled() -> bool { !std::env::var("RC_AUDIO").is_ok_and(|v| v.trim() == "0") }
 
@@ -64,7 +69,14 @@ pub fn load(root: &Path, index: u32, core_index: &[u8], core: &LevelCore, core_d
         let bank = read("sound_bank.bin")?;
         let header = read("level_header.bin")?;
         let table = rc_formats::sound_bank::music_table(&header)?;
-        let music: [Option<Vec<u8>>; 15] = std::array::from_fn(|k| (table[k] != 0).then(|| read(&format!("music/{k:03}.bin")).ok()).flatten());
+        let mut music: [Option<Vec<u8>>; 15] = std::array::from_fn(|k| (table[k] != 0).then(|| read(&format!("music/{k:03}.bin")).ok()).flatten());
+        // A RAC Maker map's song (`World::music`): its start and loop in the level's first two music slots.
+        if let Some(w) = crate::map_load::on(index).map(|d| d.world.clone()) {
+            if let Some((l, t)) = w.music {
+                for k in 0..2 { music[k] = crate::disc_source::level_file(root, l, &format!("music/{:03}.bin", t + k as u32)).ok(); }
+            }
+            if w.silent { music[0] = None; music[1] = None; }
+        }
         Ok(LevelAudio::from_parts(&bank, core_index, core, core_data, gameplay, &header, &music, collision)?)
     };
     match run() {
@@ -384,6 +396,7 @@ fn run_audio(
     ticks: Res<GameTicks>,
     cams: Query<&Transform, With<crate::fly_cam::FlyCam>>,
     play: Option<Res<crate::gameplay::Play>>,
+    editor: Option<Res<crate::editor::EditorMode>>,
 ) {
     let Some(cam) = cams.iter().next() else { return };
     let eye = crate::game_camera::game_eye(cam);
@@ -392,7 +405,8 @@ fn run_audio(
     let input = FrameInput { listener, hero_pos: listener.pos };
     let out = &mut *out;
     // With the game tick the EE frames ran in its sound step; fill the ticks it did not run with IOP-only frames.
-    let driven = play.is_some();
+    // RAC Maker's editor freezes the tick: the audio runs its own frames there (the radio plays).
+    let driven = play.is_some() && editor.is_none_or(|m| *m == crate::editor::EditorMode::Playing);
     while out.done < ticks.0 {
         out.buf.clear();
         if driven {

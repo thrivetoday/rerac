@@ -66,6 +66,8 @@ pub struct LevelWaterData {
     pub manager_classes: Vec<i32>,
     /// The sea ports present on the level and their data ([`super::sea`]).
     pub sea: Vec<super::sea::SeaPortData>,
+    /// The classes of the level's table that run 751 (its zones come from the first instance of one).
+    pub z751_classes: Vec<i32>,
 }
 
 /// Reads the underwater look bytes (tint RGBA, fog RGB, pad, near, far, near / far intensity) at `a`.
@@ -82,12 +84,37 @@ impl LevelWaterData {
     /// The level's water data: `overlay` (the raw overlay lump) parsed as `target`, `reference(level)` the reference
     /// overlays (level 01 and the patch managers' levels), `gameplay` the decompressed gameplay file.
     pub fn load(overlay: &[u8], target: &LevelOverlay, reference: &dyn Fn(u32) -> Option<Arc<LevelOverlay>>, gameplay: &[u8]) -> Result<LevelWaterData, rc_formats::FormatError> {
-        let ov = Overlay::parse(overlay)?;
-        let mut data = LevelWaterData { cuboids: wf::parse_cuboids(gameplay)?, ..Default::default() };
+        let mut data = Self::from_overlay(overlay, target, reference)?;
+        data.read_gameplay(gameplay)?;
+        Ok(data)
+    }
+
+    /// What the gameplay file gives (the part of [`LevelWaterData::load`] after [`LevelWaterData::from_overlay`]):
+    /// the cuboids, the light direction and 751's zone cuboids.
+    pub fn read_gameplay(&mut self, gameplay: &[u8]) -> Result<(), rc_formats::FormatError> {
+        self.cuboids = wf::parse_cuboids(gameplay)?;
         let bank = rc_formats::tfrag_light::parse_light_bank(gameplay)?;
-        data.light_xy = [bank.sets[0].dir_a[0], bank.sets[0].dir_a[1]];
-        let instances = rc_formats::gameplay::parse_moby_instances(gameplay)?;
-        let pvars = rc_formats::gameplay::parse_pvars(gameplay)?;
+        self.light_xy = [bank.sets[0].dir_a[0], bank.sets[0].dir_a[1]];
+        if let Some((t, zones)) = self.z751.as_mut() {
+            let instances = rc_formats::gameplay::parse_moby_instances(gameplay)?;
+            let pvars = rc_formats::gameplay::parse_pvars(gameplay)?;
+            // The zone cuboids: the pvar of the (first) instance whose class runs 751.
+            *zones = instances
+                .iter()
+                .find(|m| self.z751_classes.contains(&m.o_class))
+                .and_then(|m| m.pvar(&pvars))
+                .map(|p| wf::ripple_zone_cuboids(p, t.zones.len()))
+                .transpose()?
+                .unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// What the level's overlay gives (the code-matched part: the same for every gameplay file of the level, so a
+    /// caller may keep it and only [`LevelWaterData::read_gameplay`] again).
+    pub fn from_overlay(overlay: &[u8], target: &LevelOverlay, reference: &dyn Fn(u32) -> Option<Arc<LevelOverlay>>) -> Result<LevelWaterData, rc_formats::FormatError> {
+        let ov = Overlay::parse(overlay)?;
+        let mut data = LevelWaterData::default();
         let vtbl = target.vtbl();
         let mut refs: HashMap<u32, Arc<LevelOverlay>> = HashMap::new();
         let extra_refs = [super::sea::gaspar_ref::LEVEL];
@@ -102,18 +129,11 @@ impl LevelWaterData {
             if let Some(m) = wf::RippleModuleAddrs::locate(&r01) { data.module = Some(wf::parse_ripple_module(&ov, &m)?); }
             if let (Some(a), Some(m)) = (wf::Ripple751Addrs::locate(&r01), wf::RippleModuleAddrs::locate(&r01)) {
                 let t = wf::parse_ripple_tables(&ov, &a, &m)?;
-                // The zone cuboids: the pvar of the (first) instance whose class runs 751.
                 let f751 = r01.func(wf::RIPPLE_751_FN);
                 let classes: Vec<i32> = vtbl.iter().filter(|e| Some(e.update) == f751).map(|e| e.o_class).collect();
-                let zones = instances
-                    .iter()
-                    .find(|m| classes.contains(&m.o_class))
-                    .and_then(|m| m.pvar(&pvars))
-                    .map(|p| wf::ripple_zone_cuboids(p, t.zones.len()))
-                    .transpose()?
-                    .unwrap_or_default();
-                data.z751 = Some((t, zones));
-                data.manager_classes.extend(classes);
+                data.z751 = Some((t, Vec::new()));
+                data.manager_classes.extend(classes.iter().copied());
+                data.z751_classes = classes;
             }
         }
         for (i, p) in PORTS.iter().enumerate().skip(1) {

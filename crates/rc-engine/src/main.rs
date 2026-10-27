@@ -50,7 +50,12 @@ mod hud_images;
 mod input_map;
 mod interact_render;
 mod level_load;
+mod catalog;
+mod spawn_test;
 mod level_switch;
+mod map_load;
+mod map_logic;
+mod editor;
 mod media_render;
 mod draw_stats;
 mod dualsense;
@@ -138,6 +143,12 @@ fn main() -> anyhow::Result<()> {
     crash_log::install();
     // `--version-json` exits here; a missing or wrong data folder exits with a clear error (crate::disc_source).
     let root = disc_source::startup();
+    // `--build-catalog`: the RAC Maker asset catalog of the data folder, then exit (crate::catalog).
+    if disc_source::build_catalog() { std::process::exit(catalog::build_and_write(&root)); }
+    // `--spawn-test`: every ported moby class of the catalog on test maps, the verdicts into the catalog (crate::spawn_test).
+    if disc_source::spawn_test() { std::process::exit(spawn_test::run_all(&root)); }
+    // `--map <file>`: a RAC Maker map on its host level, which becomes the boot level (crate::map_load).
+    map_load::init();
     // Going Commando's data folder: its own front end (crate::rac2).
     // Going Commando runs the same app on its level (crate::rac2_level), its front end over it (crate::rac2).
     let rac2 = disc_source::game(&root) == disc_source::Game::Rac2;
@@ -164,7 +175,16 @@ fn main() -> anyhow::Result<()> {
         DefaultPlugins
             .set(WindowPlugin {
                 // 4:3, as the TV showed the 512x416 GS draw buffer (crate::display; docs/plan/render_pipeline.md).
-                primary_window: Some(Window { title: "ReRAC".into(), resolution: (1024u32, 768u32).into(), ..default() }),
+                // `RC_WINDOW_AT=x,y` opens the window there (physical pixels; test runs on another monitor).
+                primary_window: Some(Window {
+                    title: "ReRAC".into(),
+                    resolution: (1024u32, 768u32).into(),
+                    position: std::env::var("RC_WINDOW_AT")
+                        .ok()
+                        .and_then(|v| { let mut it = v.split(',').map(|t| t.trim().parse::<i32>()); Some(IVec2::new(it.next()?.ok()?, it.next()?.ok()?)) })
+                        .map_or(bevy::window::WindowPosition::Automatic, bevy::window::WindowPosition::At),
+                    ..default()
+                }),
                 ..default()
             })
             .set(AssetPlugin { file_path: asset_dir(), ..default() })
@@ -253,6 +273,8 @@ fn main() -> anyhow::Result<()> {
     .add_plugins(level_switch::LevelSwitchPlugin)
     .add_plugins(travel_render::TravelPlugin)
     .add_plugins(flight_render::FlightRenderPlugin)
+    .add_plugins(map_load::MapRenderPlugin)
+    .add_plugins(editor::EditorPlugin)
     .add_plugins(title_world::TitleWorldPlugin)
     .add_systems(Startup, setup_camera)
     .add_systems(level_switch::LevelStartup, setup)

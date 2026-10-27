@@ -576,6 +576,8 @@ struct HudRuntime {
     banner_seq: u32,
     /// The last `rc_game::cinematic::Cinematic::banner` call shown.
     cine_banner_seq: u32,
+    /// RAC Maker maps' messages (crate::map_logic::banner_text).
+    map_banner_seq: u32,
     /// The last [`HudFeed::reset`] applied.
     reset: u32,
     /// The last [`HudFeed::empty`] applied.
@@ -904,6 +906,7 @@ fn setup(
         game: Inputs { lang: lh.lang, ..Default::default() },
         banner_seq: 0,
         cine_banner_seq: 0,
+        map_banner_seq: 0,
         reset: 0,
         empty: 0,
         prompt_released: 0,
@@ -973,6 +976,14 @@ fn tick_and_build(
     if let Some(b) = play.as_ref().map(|p| p.svc.cinematic.banner).filter(|b| b.seq != rt.cine_banner_seq) {
         rt.cine_banner_seq = b.seq;
         rt.state.show_banner_msg(b.msg, b.ticks);
+    }
+    // A RAC Maker map's message (a rule's, a checkpoint's, the goal's): 3 seconds.
+    if play.is_some() {
+        let (seq, text) = crate::map_logic::banner_text();
+        if seq != rt.map_banner_seq {
+            rt.map_banner_seq = seq;
+            rt.state.show_banner(text.as_bytes(), Some(rc_game::hud::scale_ticks(180)));
+        }
     }
     // The game's values (bolts 0x15ed98, max HP 0x15eda0, HP 0x1415f8, the held item's ammo slot), unless the
     // RC_HUD_DEMO values drive it.

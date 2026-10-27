@@ -1,0 +1,20 @@
+{
+  "maker_format": 1,
+  "name": "Phase 0: Flat test",
+  "game": "rac1",
+  "host_level": 1,
+  "start": { "position": [160, 140, 60.5], "yaw": 1.57 },
+  "death_height": 40,
+  "loadout": [29],
+  "abilities": { "rails": true, "cables": false },
+  "terrain": [
+    { "kind": "floor", "min": [128, 104], "max": [208, 184], "height": 60, "texture": "rac1/L01/tfrag-tex/13", "tile": 8 }
+  ],
+  "rails": [
+    { "points": [[150, 152, 61.4], [162, 156, 62], [176, 162, 63.5], [188, 172, 65], [196, 178, 64]] }
+  ],
+  "objects": [
+    { "asset": "rac1/L01/moby/500", "position": [166, 144, 60], "yaw": 0, "template": 334 },
+    { "asset": "rac1/L09/moby/193", "position": [180, 130, 60], "yaw": 3.14, "template": 52 }
+  ]
+}

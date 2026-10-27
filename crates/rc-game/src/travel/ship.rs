@@ -143,7 +143,7 @@ pub fn update(w: &mut World, id: MobyId) {
     }
     if w.m(id).mode & 1 != 0 { flag = 0; }
     set_pv16(w.mm(id), PV_AT_HATCH, flag);
-    if flag == 0 { return; }
+    if flag == 0 || w.svc.travel.locked { return; }
     let lease = w.svc.interact.try_prompt(OWNER, PROMPT);
     if !w.svc.interact.triangle() || lease == 0 { return; }
     if w.svc.level == 10 && w.hero.mode == 1 {

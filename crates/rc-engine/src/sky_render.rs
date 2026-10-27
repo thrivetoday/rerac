@@ -81,6 +81,31 @@ pub struct LevelSky {
     /// The star records' memory as loaded: `maximum_sprite_count` × 0x20 bytes at header +0x1c (empty when
     /// the block has none). Generators leave some bytes untouched (e.g. a moving star's rotation).
     pub sprite_scratch: Vec<u8>,
+    /// RAC Maker maps: the colour the dome takes below the horizon ([`horizon_colour`]). On its own level the
+    /// terrain hides what is there (many skies are black below it); a map has only its own islands.
+    pub fill_below: Option<[u8; 3]>,
+    /// RAC Maker maps: the sky raised (radians of elevation, + up) and turned about the up axis (radians).
+    pub raise: f32,
+    pub turn: f32,
+}
+
+/// The colour a sky's horizon band ends in: the bottom rows of its widest texture (the horizon band of most planets),
+/// averaged by their alpha.
+pub fn horizon_colour(ls: &LevelSky) -> [u8; 3] {
+    let band = ls.textures.iter().max_by_key(|t| (t.texture.width * 64 / t.texture.height.max(1), t.texture.width * t.texture.height));
+    let Some(t) = band.map(|b| &b.texture) else { return [40, 40, 50] };
+    let (w, h) = (t.width as usize, t.height as usize);
+    let (mut sum, mut weight) = ([0f64; 3], 0f64);
+    for y in h - (h / 8).max(1)..h {
+        for x in 0..w {
+            let p = &t.rgba[(y * w + x) * 4..(y * w + x) * 4 + 4];
+            let a = p[3] as f64;
+            for c in 0..3 { sum[c] += p[c] as f64 * a; }
+            weight += a;
+        }
+    }
+    if weight < 1.0 { return [40, 40, 50]; }
+    sum.map(|v| (v / weight).round().clamp(0.0, 255.0) as u8)
 }
 
 /// Parses the level's sky block (None when the core index has none; every retail level has one).
@@ -94,7 +119,7 @@ pub fn load(core: &LevelCore, core_data: &[u8], level: u32) -> Result<Option<Lev
         Ok(o) if o > 0 => block.get(o..o + scratch_len).map(<[u8]>::to_vec).unwrap_or_default(),
         _ => Vec::new(),
     };
-    Ok(Some(LevelSky { level, sky, textures, sprite_scratch }))
+    Ok(Some(LevelSky { level, sky, textures, sprite_scratch, fill_below: None, raise: 0.0, turn: 0.0 }))
 }
 
 /// Whether the level's sky dispatch zeroes header +4 (`clear_screen`) every frame, i.e. the frame is cleared
@@ -368,11 +393,36 @@ pub(crate) fn spawn_shells(
                     None => { warn!("sky shell {si}: texture {tex} not decoded; drawing white"); white.clone() }
                 }
             } else { white.clone() };
+            // A map's sky moved: every vertex turned about the up axis and its elevation raised (the zenith stays).
+            let moved = |v: &sky::SkyGsVertex| -> [f32; 3] {
+                let p = v.position.map(|x| x as f32);
+                if ls.raise == 0.0 && ls.turn == 0.0 { return p; }
+                let (s, c) = ls.turn.sin_cos();
+                let (x, y) = (p[0] * c - p[1] * s, p[0] * s + p[1] * c);
+                let flat = (x * x + y * y).sqrt();
+                if flat < 1e-3 { return [x, y, p[2]]; }
+                let r = (flat * flat + p[2] * p[2]).sqrt();
+                let lim = 89f32.to_radians();
+                let e = (p[2].atan2(flat) + ls.raise).clamp(-lim, lim);
+                let k = r * e.cos() / flat;
+                [x * k, y * k, r * e.sin()]
+            };
             let positions: Vec<[f32; 3]> =
-                verts.iter().map(|v| game_to_bevy(v.position.map(|x| x as f32)).to_array()).collect();
+                verts.iter().map(|v| game_to_bevy(moved(v)).to_array()).collect();
             let uvs: Vec<[f32; 2]> = verts.iter().map(|v| v.st).collect();
-            // Raw GS RGBA bytes; the shader applies the GS rules per shell kind.
-            let colors: Vec<[f32; 4]> = verts.iter().map(|v| v.rgba.map(|c| c as f32)).collect();
+            // Raw GS RGBA bytes; the shader applies the GS rules per shell kind. On a map the plain dome fades into
+            // the horizon's colour below it (down to 15° under the horizon).
+            let colors: Vec<[f32; 4]> = verts.iter().map(|v| {
+                let mut c = v.rgba.map(|c| c as f32);
+                if let (Some(fill), false) = (ls.fill_below, textured) {
+                    let p = moved(v);
+                    let elev = p[2].atan2((p[0] * p[0] + p[1] * p[1]).sqrt());
+                    let k = (-elev / 15f32.to_radians()).clamp(0.0, 1.0);
+                    let k = k * k * (3.0 - 2.0 * k);
+                    for i in 0..3 { c[i] = c[i] * (1.0 - k) + fill[i] as f32 * k; }
+                }
+                c
+            }).collect();
             let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)

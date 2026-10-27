@@ -321,10 +321,21 @@ fn pre_tick(
     mut gs: Option<ResMut<Persistent>>,
     level: Res<crate::Level>,
     mut audio: Option<ResMut<crate::audio_out::AudioOut>>,
+    editor: Option<Res<crate::editor::EditorMode>>,
+    mut was_playing: Local<bool>,
 ) {
     let t = &mut *t;
     let Some(mut play) = play else { return };
+    // A new play: a fresh level outside the editor; in RAC Maker's editor, F5 (play starts on the level as loaded;
+    // the editor's own loads show the ship parked).
+    let playing = editor.as_deref().is_some_and(|m| *m == crate::editor::EditorMode::Playing);
+    let fresh = match editor { None => play.is_added(), Some(_) => playing && !*was_playing };
+    *was_playing = playing;
     let p = &mut *play;
+    // A RAC Maker map with a ship: every play starts with its landing (crate::map_load::ship_start put Ratchet by it).
+    if fresh && t.tr.is_none() && !crate::saves::front_end_active() && crate::map_load::on(p.level_index()).is_some_and(|d| d.ship.is_some()) {
+        map_entry(t, p, &mut mm, &level.0);
+    }
     // `entry` after a level change: the landing (the set-up has built the play state).
     if std::mem::take(&mut t.entry_pending) && t.tr.is_some() {
         level_entry(t, p, &mut mm, gs.as_deref_mut(), &level.0, audio.as_deref_mut());
@@ -461,6 +472,25 @@ fn level_entry(t: &mut Travel, p: &mut Play, mm: &mut MenuMode, gs: Option<&mut 
     println!("travel: level {level:02} entry: {}", if lands { "the landing (mode 6, sub 8)" } else { "mode 0 at once" });
 }
 
+/// A RAC Maker map's entry: its ship's landing (any level, any story: `ShipMode::map_landing`), the music paused until
+/// the landing's end as `entry` does.
+fn map_entry(t: &mut Travel, p: &mut Play, mm: &mut MenuMode, lv: &crate::level_load::LoadedLevel) {
+    let level = p.svc.level as i32;
+    let ship = p.svc.travel.ship;
+    let o2 = p.game.hero.owned.0.get(space::ITEM_O2_MASK).is_some_and(|&b| b != 0);
+    let lump = space_lump(space::lump_and_stream(space::SUB_LANDING, level, ship, o2, true).0);
+    let mut out = SpaceFrame::default();
+    let lands = with_world(p, lv.collision.as_ref(), |w| t.mode.map_landing(w, lump.clone(), &mut out));
+    if lands {
+        scene_audio::post(SceneAudioCmd::PauseMusic);
+        mm.state.set(Mode::Ship);
+        if let Some(l) = lump { start_actors(t, l); }
+        t.hero_hidden = true;
+    }
+    apply_audio(&out.audio);
+    println!("travel: map entry: {}", if lands { "the ship's landing" } else { "no landing scene: mode 0" });
+}
+
 /// The space scene's actors are set up from the lump on the next upload.
 fn start_actors(t: &mut Travel, l: SpaceLump) {
     t.lump = Some(l);
@@ -523,10 +553,32 @@ fn post_tick(
     mut audio: Option<ResMut<crate::audio_out::AudioOut>>,
     mut flight: ResMut<crate::flight_render::FlightRender>,
     cams: ViewCams,
+    editor: Option<Res<crate::editor::EditorMode>>,
+    mut was_playing: Local<bool>,
 ) {
     let t = &mut *t;
     let Some(mut play) = play else { return };
     let p = &mut *play;
+    // RAC Maker's editor, back from play (F5) in the middle of a landing or take-off: the scene's hold let go, as at
+    // its end, so the editor's view shows Ratchet and the world.
+    let playing = editor.as_deref().is_some_and(|m| *m == crate::editor::EditorMode::Playing);
+    if editor.is_some() && !playing && std::mem::replace(&mut *was_playing, false) && t.mode.active() {
+        t.mode = Default::default();
+        t.lump = None;
+        t.poses.clear();
+        t.hero_hidden = false;
+        t.hud_off = false;
+        mm.state.set(Mode::Gameplay);
+        active.space_hero_hidden = false;
+        active.space_actors.clear();
+        active.camera = None;
+        active.white = 0.0;
+        p.game.camera_paused = false;
+        p.svc.cinematic.fade = 0.0;
+        scene_audio::post(SceneAudioCmd::ResumeMusic { after: 0 });
+        println!("travel: back to the editor: the ship's scene let go");
+    }
+    if playing { *was_playing = true; }
     let lv = &level.0;
     if let Some(mut tr) = t.tr.take() {
         let done = transition_frame(t, &mut tr, p, &mut mm, gs.as_deref_mut(), session.as_deref_mut(), lv, &mut active, &mut change, &movie, audio.as_deref_mut(), &mut flight);
@@ -570,6 +622,13 @@ fn post_tick(
     }
     apply_frame(t, p, &out, &mut active);
     match out.event {
+        Some(SpaceEvent::PlanetPage) if crate::map_load::on(p.level_index()).is_some_and(|d| d.ship.is_some()) => {
+            // A RAC Maker map: boarding the ship after the goal finishes it (no planet page, no flight).
+            mm.state.set(Mode::Gameplay);
+            t.hud_off = false;
+            crate::map_logic::complete(p.game.counter);
+            println!("travel: tick {}: the take-off ended: the map is finished", p.game.counter);
+        }
         Some(SpaceEvent::PlanetPage) => {
             // GameStateUpdate's end of the take-off: EnterMenuMode(0) with kind 0xe (the planet select page).
             mm.state.set(Mode::Gameplay);

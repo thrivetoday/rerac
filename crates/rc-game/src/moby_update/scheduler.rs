@@ -346,7 +346,10 @@ pub fn run_moby(w: &mut World, id: MobyId) {
     if w.m(id).mode & mode::NO_ANIM == 0 { crate::moby_update::anim_sound::advance(w, id); }
     if let Some(addr) = w.m(id).update_fn {
         if let Some(u) = ported(addr) {
+            w.svc.fx.running = Some(o_class);
             classes::dispatch(u, w, id);
+            w.svc.fx.running = None;
+            *w.svc.fx.class_runs.entry(o_class).or_default() += 1;
         } else if let Some(ext) = w.external.as_deref_mut() {
             ext.update(addr, id, w.table, w.rng, w.camera, w.counter, w.particles.as_deref_mut());
         }

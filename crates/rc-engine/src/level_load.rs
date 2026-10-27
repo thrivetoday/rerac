@@ -122,12 +122,28 @@ pub type PerLevel<T> = [std::sync::OnceLock<T>; 20];
 /// The cell of the loaded level in a [`PerLevel`] cache.
 pub fn per_level<T>(cells: &'static PerLevel<T>) -> &'static std::sync::OnceLock<T> { &cells[(level_index() as usize).min(19)] }
 
+/// How far the level load running now has come: the stages done (of [`LOAD_STAGES`]); RAC Maker's loading bar.
+pub static LOAD_STEP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// The stages of a level load, in order (what the loading bar names).
+pub const LOAD_STAGES: [&str; 12] = [
+    "level geometry", "textures", "map and imports", "collision and objects", "Ratchet's moves", "ties", "shrubs",
+    "sky", "particles", "HUD", "water", "sounds",
+];
+
 pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
     // Going Commando's level file (crate::rac2_level), read into the same structure.
     if crate::disc_source::game(root) == crate::disc_source::Game::Rac2 { return crate::rac2_level::load(root, index); }
     // The game data folder (crate::disc_source).
     let read = |name: &str| crate::disc_source::level_file(root, index, name);
     let mut t = LoadTimings::default();
+    // The stages of a map load (RAC Maker reloads the level on every edit: where the time goes).
+    let (begun, mut last, mut stages) = (Instant::now(), Instant::now(), Vec::<(&str, f64)>::new());
+    LOAD_STEP.store(0, std::sync::atomic::Ordering::Relaxed);
+    let mut stage = |name: &'static str| {
+        stages.push((name, last.elapsed().as_secs_f64() * 1e3));
+        last = Instant::now();
+        LOAD_STEP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    };
 
     let t0 = Instant::now();
     let core_index = read("core_index.bin")?;
@@ -148,32 +164,95 @@ pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
     // Game's LightTfrags pass overwrites the stored RGBA (docs/plan/tfrag_lighting.md); RC_NO_LIGHT=1 skips it.
     crate::tfrag_light::light_level_tfrags(root, index, &mut tfrags).context("lighting tfrags")?;
     t.parse_tfrags = t0.elapsed();
+    stage("tfrags");
 
     let t0 = Instant::now();
-    let textures = texture::parse_textures(&core, &core_data, &gs_ram).context("decoding textures")?;
+    let mut textures = texture::parse_textures(&core, &core_data, &gs_ram).context("decoding textures")?;
     t.parse_textures = t0.elapsed();
     let tfrag_lod = crate::tfrag_lod::load(&core, &core_data, &gs_ram)?;
+    stage("textures");
 
-    let gameplay = rc_data::level_gameplay(root, index).context("decompressing gameplay_ntsc")?.to_vec();
+    let mut gameplay = rc_data::level_gameplay(root, index).context("decompressing gameplay_ntsc")?.to_vec();
+    // A RAC Maker map on this level (crate::map_load): its gameplay file, collision and imported classes replace the
+    // level's world; the level's terrain, ties and shrubs are not drawn.
+    let map = crate::map_load::on(index);
+    let imports = match &map {
+        Some(def) => {
+            gameplay = crate::map_load::patch_gameplay(root, def, &gameplay).context("putting the map in the gameplay file")?;
+            let host: Vec<i32> = core.moby_classes.iter().map(|e| e.o_class).collect();
+            crate::map_load::import_classes(root, def, &host, &mut textures).context("importing the map's classes")?
+        }
+        None => Vec::new(),
+    };
+    stage("map patch + imports");
     let fog = crate::game_camera::LevelFog::parse(&gameplay).context("parsing level settings")?;
     let background = crate::game_camera::level_background(&gameplay).context("parsing level settings")?;
-    let collision = rc_formats::collision::parse_collision(&core, &core_data)
-        .map_err(|e| eprintln!("level {index:02}: collision not parsed ({e}); no game tick"))
-        .ok();
-    let mobys = crate::moby_render::load_mobys(root, &core, &core_data, &gameplay, collision.as_ref()).context("loading mobys")?;
-    let ties = crate::tie_render::load_ties(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading ties")?;
-    let shrubs = crate::shrub_render::load_shrubs(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading shrubs")?;
+    // A custom map's surfaces (slippery, hot, deadly, magnetic) work whatever its host planet handles.
+    rc_game::hero::surface::set_full_rules(map.is_some());
+    rc_game::moby_update::services::SKIP_MISSING_CLASSES.store(map.is_some(), std::sync::atomic::Ordering::Relaxed);
+    let collision = match &map {
+        Some(def) => {
+            let rails: Vec<Vec<[f32; 3]>> = def.rails.iter().map(|r| r.line()).collect();
+            Some(rc_map::floor::collision(&def.floors, &def.patches, &def.walkway_pieces(), &rails, &[], rc_map::floor::GROUND))
+        }
+        None => rc_formats::collision::parse_collision(&core, &core_data)
+            .map_err(|e| eprintln!("level {index:02}: collision not parsed ({e}); no game tick"))
+            .ok(),
+    };
+    let mut mobys = crate::moby_render::load_mobys_with_gs(root, &core, &core_data, &gameplay, &gs_ram, collision.as_ref(), imports).context("loading mobys")?;
+    stage("collision + mobys");
+    if map.is_some() { crate::map_load::complete_ratchet_sequences(root, index, &mut mobys).context("completing Ratchet's animations")?; }
+    // The map's solid objects (`Object::solid`): their models in the collision.
+    let collision = match &map {
+        Some(def) if def.objects.iter().any(|o| o.solid == Some(true)) => {
+            let extra = crate::map_load::solid_triangles(def, &mobys.classes, &gameplay);
+            let rails: Vec<Vec<[f32; 3]>> = def.rails.iter().map(|r| r.line()).collect();
+            println!("map: {} solid object triangles in the collision", extra.len());
+            Some(rc_map::floor::collision(&def.floors, &def.patches, &def.walkway_pieces(), &rails, &extra, rc_map::floor::GROUND))
+        }
+        _ => collision,
+    };
+    stage("ratchet sequences");
+    let mut ties = crate::tie_render::load_ties(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading ties")?;
+    stage("ties");
+    let mut shrubs = crate::shrub_render::load_shrubs(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading shrubs")?;
+    stage("shrubs");
+    if map.is_some() {
+        tfrags.clear();
+        (ties.instances, ties.class_of, ties.colors) = Default::default();
+        (shrubs.instances, shrubs.class_of, shrubs.palettes) = Default::default();
+    }
 
-    let sky = crate::sky_render::load(&core, &core_data, index).context("loading sky")?;
+    // A map's sky can be another planet's (`World::sky`): its sky block, rotations and stars.
+    let mut sky = match map.as_ref().and_then(|d| d.world.sky).filter(|&l| l != index) {
+        Some(l) => {
+            let (c, d) = crate::map_load::level_core(root, l)?;
+            crate::sky_render::load(&c, &d, l).context("loading the map's sky")?
+        }
+        None => crate::sky_render::load(&core, &core_data, index).context("loading sky")?,
+    };
+    if let (Some(def), Some(ls)) = (map.as_ref(), sky.as_mut()) {
+        ls.fill_below = Some(crate::sky_render::horizon_colour(ls));
+        (ls.raise, ls.turn) = (def.world.sky_raise.to_radians(), def.world.sky_turn.to_radians());
+    }
     let occlusion = crate::occlusion::load(&core, &core_data, &gameplay, &tfrags, &ties.instances, &mobys.instances).context("loading occlusion")?;
+    stage("sky + occlusion");
 
     let particles = crate::particle_render::load(&core, &core_index, &core_data, &gameplay, index).context("loading particles")?;
+    stage("particles");
     let hud = crate::hud_render::load(root, index, &core, &core_index, &core_data, &gameplay).map_err(|e| eprintln!("hud: {e:#}")).ok();
+    stage("hud");
     let water = crate::water_render::load(root, index, &gameplay).context("loading water")?;
     let sea = crate::sea_render::load(&core, &core_index, &core_data, &water);
+    stage("water");
     let death_z = level_settings_f32(&gameplay, 0x28).context("reading the death height")?;
     let audio = crate::audio_out::load(root, index, &core_index, &core, &core_data, &gameplay, collision.clone());
     let moby_class_order = core.moby_classes.iter().map(|e| e.o_class).collect();
+    stage("audio");
+    if map.is_some() {
+        let s: Vec<String> = stages.iter().map(|(n, ms)| format!("{n} {ms:.0}")).collect();
+        println!("map: level load {:.0} ms: {}", begun.elapsed().as_secs_f64() * 1e3, s.join(", "));
+    }
     Ok(LoadedLevel {
         tfrags, textures, fog, background, mobys, ties, shrubs, sky, occlusion, tfrag_lod, particles, hud, water, sea, collision, death_z, audio,
         gameplay, moby_class_order, timings: t,

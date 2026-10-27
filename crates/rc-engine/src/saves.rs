@@ -207,15 +207,15 @@ pub struct FrontEndRt {
 }
 
 /// Start in the front end (the boot flow: the card check, the logos, the title, the main menu) instead of the level. The
-/// default; `RC_LEVEL` (a development start straight into a level) skips it unless `RC_FRONTEND=1`, and `RC_FRONTEND=0`
-/// always skips it.
+/// default; `RC_LEVEL` (a development start straight into a level) and a RAC Maker map (`--map`, crate::map_load) skip it
+/// unless `RC_FRONTEND=1`, and `RC_FRONTEND=0` always skips it.
 pub fn front_end_requested() -> bool {
     // Going Commando's front end is its own (crate::rac2).
     if crate::disc_source::current() == crate::disc_source::Game::Rac2 { return false; }
     match std::env::var("RC_FRONTEND").map(|v| v.trim().to_owned()) {
         Ok(v) if v == "1" => true,
         Ok(v) if v == "0" => false,
-        _ => std::env::var("RC_LEVEL").is_err(),
+        _ => std::env::var("RC_LEVEL").is_err() && crate::map_load::active().is_none(),
     }
 }
 

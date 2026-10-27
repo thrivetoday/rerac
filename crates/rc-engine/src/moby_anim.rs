@@ -61,7 +61,7 @@ pub fn load_anim_classes(core: &LevelCore, core_data: &[u8], classes: &[LevelMob
         .collect()
 }
 
-fn ratchet_sequences<'a>(core: &LevelCore, block: &dyn Fn(&str) -> Option<&'a [u8]>, joints: usize) -> Vec<Option<MobySequence>> {
+pub(crate) fn ratchet_sequences<'a>(core: &LevelCore, block: &dyn Fn(&str) -> Option<&'a [u8]>, joints: usize) -> Vec<Option<MobySequence>> {
     (0..core.ratchet_seqs.len())
         .map(|i| {
             let blob = block(&format!("ratchet_seq/{i:03}"))?;

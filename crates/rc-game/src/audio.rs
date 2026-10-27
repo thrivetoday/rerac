@@ -766,6 +766,20 @@ impl AudioSystem {
         self.music.start_track(0, 1, 0x400, &mut self.stream_cmds);
     }
 
+    /// RAC Maker's radio: the music stopped ([`AudioSystem::movie_stop`]'s state), then `song` (its start and its
+    /// loop, in music slots 0 and 1) played from the start; None leaves it silent.
+    pub fn play_song(&mut self, song: Option<(Arc<music::MusicTrack>, Arc<music::MusicTrack>)>) {
+        self.movie_stop();
+        if let Some((start, looped)) = song {
+            self.data.music[0] = Some(start);
+            self.data.music[1] = Some(looped);
+            self.music.start_track(0, 1, 0x400, &mut self.stream_cmds);
+        }
+    }
+
+    /// The music track in slot `k` (the radio checks its song is still the one playing).
+    pub fn song_slot(&self, k: usize) -> Option<&Arc<music::MusicTrack>> { self.data.music.get(k).and_then(|m| m.as_ref()) }
+
     /// `MovieExitToGameplay` 0x2ad2b8: `music_start_track(0x151708, 1, 0x400)`, the current track from the start, and
     /// the reverb resent (dirty bit 0x10).
     pub fn movie_exit(&mut self) {

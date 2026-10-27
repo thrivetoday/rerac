@@ -17,6 +17,12 @@
 //! exits with [`EXIT_NO_DATA`] or [`EXIT_DATA_FORMAT`], before any window opens.
 //!
 //! `--version-json` prints [`version_json`] and exits before anything else (no window, no data access).
+//!
+//! `--edit <file>` opens a RAC Maker map in the editor (crate::editor; a new map when the file does not exist).
+//! `--map <file>` (or `--map=<file>`) plays a RAC Maker map on its host level instead of the boot level ([`map_file`],
+//! crate::map_load). `--build-catalog` writes the RAC Maker asset catalog of the data folder and exits ([`build_catalog`],
+//! crate::catalog); `--spawn-test` runs every ported moby class on test maps and writes the verdicts into it
+//! ([`spawn_test`], crate::spawn_test).
 
 use anyhow::{Context, Result};
 use std::ffi::OsString;
@@ -34,7 +40,8 @@ pub const EXIT_DATA_FORMAT: i32 = 4;
 
 /// The launcher contract's `--version-json` line.
 pub fn version_json() -> String {
-    format!(r#"{{"name":"rerac","version":"{}","game":"rac1","data_format":{DATA_FORMAT}}}"#, env!("CARGO_PKG_VERSION"))
+    // `maker_format`: the RAC Maker map files `--map` reads (an additive field, launcher contract clarification 2).
+    format!(r#"{{"name":"rerac","version":"{}","game":"rac1","data_format":{DATA_FORMAT},"maker_format":{}}}"#, env!("CARGO_PKG_VERSION"), rc_map::MAKER_FORMAT)
 }
 
 /// Which rule chose the data root.
@@ -48,12 +55,12 @@ impl Origin {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Args { VersionJson, Run { data_dir: Option<PathBuf>, ignored: Vec<String> } }
+enum Args { VersionJson, Run { data_dir: Option<PathBuf>, map: Option<PathBuf>, catalog: bool, spawn_test: bool, edit: bool, ignored: Vec<String> } }
 
 /// The runtime's own arguments. Unknown arguments are returned for one warning line (the OS or a future launcher
 /// may pass some), not rejected.
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> std::result::Result<Args, String> {
-    let (mut data_dir, mut ignored) = (None, Vec::new());
+    let (mut data_dir, mut map, mut catalog, mut spawn_test, mut edit, mut ignored) = (None, None, false, false, false, Vec::new());
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         let s = a.to_string_lossy();
@@ -64,11 +71,24 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> std::result::Result<A
         } else if let Some(v) = s.strip_prefix("--data-dir=") {
             if v.is_empty() { return Err("usage: --data-dir=<folder> needs a folder".into()); }
             data_dir = Some(PathBuf::from(v));
+        } else if s == "--build-catalog" {
+            catalog = true;
+        } else if s == "--spawn-test" {
+            spawn_test = true;
+        } else if s == "--edit" {
+            let v = it.next().filter(|v| !v.is_empty()).ok_or("usage: --edit <file> needs a map file")?;
+            (map, edit) = (Some(PathBuf::from(v)), true);
+        } else if s == "--map" {
+            let v = it.next().filter(|v| !v.is_empty()).ok_or("usage: --map <file> needs a map file")?;
+            map = Some(PathBuf::from(v));
+        } else if let Some(v) = s.strip_prefix("--map=") {
+            if v.is_empty() { return Err("usage: --map=<file> needs a map file".into()); }
+            map = Some(PathBuf::from(v));
         } else {
             ignored.push(s.into_owned());
         }
     }
-    Ok(Args::Run { data_dir, ignored })
+    Ok(Args::Run { data_dir, map, catalog, spawn_test, edit, ignored })
 }
 
 fn nonempty(v: Option<OsString>) -> Option<PathBuf> { v.filter(|v| !v.is_empty()).map(PathBuf::from) }
@@ -162,6 +182,23 @@ pub fn current() -> Game {
 }
 
 static ROOT: OnceLock<PathBuf> = OnceLock::new();
+static MAP: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+static CATALOG: OnceLock<bool> = OnceLock::new();
+static SPAWN_TEST: OnceLock<bool> = OnceLock::new();
+static EDIT: OnceLock<bool> = OnceLock::new();
+
+/// `--edit`: the map file opens in the editor (crate::editor) instead of playing.
+pub fn edit_mode() -> bool { EDIT.get().copied().unwrap_or(false) }
+
+/// The `--map` file of this run (None: the game's own levels, and before [`startup`]).
+pub fn map_file() -> Option<&'static Path> { MAP.get().and_then(|m| m.as_deref()) }
+
+/// `--build-catalog`: write the asset catalog and exit (crate::catalog).
+pub fn build_catalog() -> bool { CATALOG.get().copied().unwrap_or(false) }
+
+/// `--spawn-test`: test the catalog's moby classes on maps and exit (crate::spawn_test).
+pub fn spawn_test() -> bool { SPAWN_TEST.get().copied().unwrap_or(false) }
 
 /// The process start (`main`, first line): handles `--version-json`, resolves and checks the data root, and
 /// remembers it for [`data_root`]. Prints and exits on any failure; never returns without a usable folder.
@@ -170,10 +207,14 @@ pub fn startup() -> PathBuf {
         Ok(a) => a,
         Err(e) => { eprintln!("error: {e}"); std::process::exit(EXIT_USAGE) }
     };
-    let (arg, ignored) = match args {
+    let (arg, map, catalog, spawn_test, edit, ignored) = match args {
         Args::VersionJson => { println!("{}", version_json()); std::process::exit(0) }
-        Args::Run { data_dir, ignored } => (data_dir, ignored),
+        Args::Run { data_dir, map, catalog, spawn_test, edit, ignored } => (data_dir, map, catalog, spawn_test, edit, ignored),
     };
+    EDIT.get_or_init(|| edit);
+    SPAWN_TEST.get_or_init(|| spawn_test);
+    MAP.get_or_init(|| map);
+    CATALOG.get_or_init(|| catalog);
     if !ignored.is_empty() { eprintln!("warning: ignoring unknown arguments {ignored:?}"); }
     for var in ["RC_ISO", "RC_SOURCE"] {
         if std::env::var_os(var).is_some_and(|v| !v.is_empty()) {
@@ -222,20 +263,25 @@ mod tests {
     #[test]
     fn version_json_is_the_contract_line() {
         let v = version_json();
-        assert_eq!(v, format!(r#"{{"name":"rerac","version":"{}","game":"rac1","data_format":1}}"#, env!("CARGO_PKG_VERSION")));
+        assert_eq!(v, format!(r#"{{"name":"rerac","version":"{}","game":"rac1","data_format":1,"maker_format":1}}"#, env!("CARGO_PKG_VERSION")));
         assert_eq!(json_uint(&v, "data_format"), Some(1));
         assert_eq!(json_str(&v, "game"), Some("rac1"));
     }
 
     #[test]
     fn arguments() {
-        assert_eq!(parse_args(os(&[])), Ok(Args::Run { data_dir: None, ignored: vec![] }));
-        assert_eq!(parse_args(os(&["--data-dir", "/d"])), Ok(Args::Run { data_dir: Some("/d".into()), ignored: vec![] }));
+        assert_eq!(parse_args(os(&[])), Ok(Args::Run { data_dir: None, map: None, catalog: false, spawn_test: false, edit: false, ignored: vec![] }));
+        assert_eq!(parse_args(os(&["--data-dir", "/d"])), Ok(Args::Run { data_dir: Some("/d".into()), map: None, catalog: false, spawn_test: false, edit: false, ignored: vec![] }));
         assert_eq!(parse_args(os(&["--data-dir=/a b", "-psn_0_1"])),
-            Ok(Args::Run { data_dir: Some("/a b".into()), ignored: vec!["-psn_0_1".into()] }));
+            Ok(Args::Run { data_dir: Some("/a b".into()), map: None, catalog: false, spawn_test: false, edit: false, ignored: vec!["-psn_0_1".into()] }));
         assert_eq!(parse_args(os(&["--data-dir", "/d", "--version-json"])), Ok(Args::VersionJson));
         assert!(parse_args(os(&["--data-dir"])).is_err());
         assert!(parse_args(os(&["--data-dir="])).is_err());
+        assert_eq!(parse_args(os(&["--map", "a.json", "--data-dir=/d"])), Ok(Args::Run { data_dir: Some("/d".into()), map: Some("a.json".into()), catalog: false, spawn_test: false, edit: false, ignored: vec![] }));
+        assert_eq!(parse_args(os(&["--map=m/b.json"])), Ok(Args::Run { data_dir: None, map: Some("m/b.json".into()), catalog: false, spawn_test: false, edit: false, ignored: vec![] }));
+        assert!(parse_args(os(&["--map"])).is_err());
+        assert_eq!(parse_args(os(&["--edit", "n.json"])), Ok(Args::Run { data_dir: None, map: Some("n.json".into()), catalog: false, spawn_test: false, edit: true, ignored: vec![] }));
+        assert_eq!(parse_args(os(&["--build-catalog"])), Ok(Args::Run { data_dir: None, map: None, catalog: true, spawn_test: false, edit: false, ignored: vec![] }));
     }
 
     #[test]

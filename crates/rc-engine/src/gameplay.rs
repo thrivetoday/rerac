@@ -138,13 +138,34 @@ pub(crate) const EMITTER_UPDATE: u32 = 0x2bd100;
 /// `RC_GIVE_ITEMS=<id>,...` (debug): the item ids to own from the start (decimal or `0x` hex; ids outside the
 /// item table are ignored).
 fn give_items() -> Option<Vec<usize>> {
-    let v = std::env::var("RC_GIVE_ITEMS").ok()?;
+    // A RAC Maker map's loadout (crate::map_load) when RC_GIVE_ITEMS is not set.
+    let Ok(v) = std::env::var("RC_GIVE_ITEMS") else {
+        return crate::map_load::active().map(|m| m.loadout.clone()).filter(|l| !l.is_empty());
+    };
     let ids: Vec<usize> = v
         .split(',')
         .filter_map(|t| { let t = t.trim(); t.strip_prefix("0x").map_or_else(|| t.parse().ok(), |h| usize::from_str_radix(h, 16).ok()) })
         .filter(|&i| i < rc_formats::save_game::ITEM_COUNT)
         .collect();
     (!ids.is_empty()).then_some(ids)
+}
+
+/// RAC Maker (crate::editor): the map's loadout as the items Ratchet owns, exactly: the items of `editable` not in
+/// `loadout` taken away (and off the quick select), the loadout's granted as the boot grants them (ammo, quick select,
+/// the last back / feet / head item worn). Before each reload of the map, so a loadout edit plays.
+pub fn apply_loadout(gs: &mut GameState, sess: &mut SessionState, loadout: &[usize], editable: &[usize], level: u32) {
+    use rc_game::inventory::{debug_grant, GrantEquip};
+    for &id in editable.iter().filter(|i| !loadout.contains(i)) {
+        if let Some(o) = gs.global.owned.get_mut(id) { *o = 0; }
+        if let Some(a) = gs.global.acquired.get_mut(id) { *a = 0; }
+        for q in gs.global.quick_select.iter_mut().filter(|q| **q == id as i32) { *q = 0; }
+        for e in gs.global.equipped.iter_mut().filter(|e| **e == id as i32) { *e = 0; }
+    }
+    let root = crate::level_load::extracted_root();
+    let tables = crate::disc_source::read_path(&root, &root.join("boot/SCUS_971.99")).ok()
+        .zip(crate::disc_source::level_file(&root, level, "overlay.bin").ok())
+        .and_then(|(elf, ov)| ItemTables::load(&elf, &ov).ok());
+    debug_grant(gs, sess, loadout, tables.as_ref(), GrantEquip::LastPerSlot);
 }
 
 /// `RC_PLAY` (default on; `0` = fly camera only).
@@ -273,7 +294,8 @@ impl Plugin for GameplayPlugin {
                 PreUpdate,
                 (setup, input_map::sample_system, set_budget, keys).chain().after(bevy::input::InputSystems),
             )
-            .add_systems(FixedUpdate, tick.in_set(GameTick).before(crate::particle_render::tick))
+            // The RAC Maker editor freezes the tick while editing (crate::editor).
+            .add_systems(FixedUpdate, tick.in_set(GameTick).before(crate::particle_render::tick).run_if(crate::editor::playing))
             .add_systems(FixedUpdate, elapsed_frame.after(GameTick).after(crate::menu_render::MenuFrameSet))
             .add_systems(Update, (show_reloaded, debug_dump, respawn_probe))
             .add_systems(PostUpdate, ratchet_visibility.before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate))
@@ -521,12 +543,15 @@ impl HitSink for CellHits<'_, '_, '_> {
 /// The level's moby class collision blobs (class header +0x10), from the core (re-read here: the level loader
 /// keeps no raw class blobs).
 fn moby_collision_blobs(index: u32) -> anyhow::Result<Vec<(i32, rc_formats::moby_collision::MobyCollision)>> {
-    use anyhow::Context;
     let root = crate::level_load::extracted_root();
-    let idx = crate::disc_source::level_file(&root, index, "core_index.bin").context("core index")?;
-    let data = rc_data::level_core_data(&root, index).context("decompressing core data")?;
-    let core = rc_formats::level::parse_level_core(&idx, data.len()).context("parsing core index")?;
-    Ok(rc_formats::moby_collision::parse_level(&core, &data)?)
+    let (core, data) = crate::map_load::level_core(&root, index)?;
+    let mut blobs = rc_formats::moby_collision::parse_level(&core, &data)?;
+    // A RAC Maker map's imported classes: their blobs from their own levels (crate::map_load).
+    for (l, classes) in crate::map_load::import_overlays(index) {
+        let (core, data) = crate::map_load::level_core(&root, l)?;
+        blobs.extend(rc_formats::moby_collision::parse_level(&core, &data)?.into_iter().filter(|(c, _)| classes.contains(&(*c as i16))));
+    }
+    Ok(blobs)
 }
 
 /// The collision blob of spaceship class `o_class` (530..=533) from the global `spaceships` file (entry o_class − 530).
@@ -649,6 +674,9 @@ pub struct Play {
     /// itself ([`death_reload`], [`respawn`]) on the first tick after them.
     pub death_pending: bool,
     frozen_hint: bool,
+    /// RAC Maker live previews ([`editor_show`]): per static instance, where it stood at load (position, yaw) and the
+    /// pieces it made then (dynamic moby, position, rows, mode).
+    editor_children: HashMap<usize, ([f32; 3], f32, Vec<(MobyId, [f32; 4], [[f32; 4]; 4], u16)>)>,
     /// Ratchet's entities hidden (his moby's mode bit 1: the first-person view hides him, `HeroSyncMoby`).
     ratchet_hidden: bool,
     /// Dev builds: the noclip position (N toggles; [`noclip_step`]).
@@ -667,6 +695,10 @@ pub struct Play {
 }
 
 impl Play {
+    /// The level this play runs on.
+    pub fn level_index(&self) -> u32 { self.level }
+    /// The moby the game made for static instance `ii` (None: not made, or not driven by the table).
+    pub fn driven_moby(&self, ii: usize) -> Option<MobyId> { self.driven.iter().find(|d| d.1 == ii).map(|d| d.0) }
     /// The loader's ship in the moby table (`0x13e030`; crate::scene_render hides / shows it for the mission NPC).
     pub fn ship_moby(&self) -> Option<MobyId> { self.ship.map(|s| s.0) }
 }
@@ -676,15 +708,57 @@ impl Play {
 /// 03's for the swing target), with the engine's external updates (emitter, ripple manager). Built once per level;
 /// without the overlays, every class by number.
 pub fn level_ports() -> &'static rc_game::moby_update::classes::LevelPorts {
+    use rc_game::moby_update::classes::LevelPorts;
+    let index = crate::level_load::level_index();
+    let imports = crate::map_load::import_overlays(index);
+    if imports.is_empty() { return own_level_ports(index); }
+    // A RAC Maker map's imported classes run what their own level's table names (crate::map_load). One table per set
+    // of imports: the editor's reloads ask for each set again (leaked: a session holds few).
+    // The table is built outside the lock (another level's overlay can take seconds the first time): the main thread
+    // asks every frame, and while the loader thread builds a new set it gets the last table built for this level.
+    type Key = (u32, Vec<(u32, Vec<i16>)>);
+    static WITH: std::sync::Mutex<Option<HashMap<Key, &'static LevelPorts>>> = std::sync::Mutex::new(None);
+    static BUILDING: std::sync::Mutex<Vec<Key>> = std::sync::Mutex::new(Vec::new());
+    static LAST: std::sync::Mutex<[Option<&'static LevelPorts>; 20]> = std::sync::Mutex::new([None; 20]);
+    let key = (index, imports);
+    if let Some(p) = WITH.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get(&key) { return p; }
+    {
+        let mut b = BUILDING.lock().unwrap_or_else(|e| e.into_inner());
+        if b.contains(&key) {
+            drop(b);
+            return LAST.lock().unwrap_or_else(|e| e.into_inner())[(index as usize).min(19)].unwrap_or_else(|| own_level_ports(index));
+        }
+        b.push(key.clone());
+    }
+    let mut ports = own_level_ports(index).clone();
+    for (l, classes) in &key.1 {
+        let from = own_level_ports(*l);
+        for &c in classes {
+            ports.import(c, from);
+            println!("gameplay: map import {c} (level {l:02}) runs {:?}", ports.get(c));
+        }
+    }
+    let p: &'static LevelPorts = Box::leak(Box::new(ports));
+    LAST.lock().unwrap_or_else(|e| e.into_inner())[(index as usize).min(19)] = Some(p);
+    BUILDING.lock().unwrap_or_else(|e| e.into_inner()).retain(|k| *k != key);
+    WITH.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(key, p);
+    p
+}
+
+/// Level `index`'s own ported updates (its overlay's class table, no map imports): built once per level.
+fn own_level_ports(index: u32) -> &'static rc_game::moby_update::classes::LevelPorts {
     use rc_formats::level_overlay::LevelOverlay;
     use rc_game::moby_update::classes::LevelPorts;
-    // One table per level (crate::level_switch: the loaded level changes at run time).
     static PORTS: crate::level_load::PerLevel<LevelPorts> = [const { std::sync::OnceLock::new() }; 20];
-    crate::level_load::per_level(&PORTS).get_or_init(|| {
-        let (root, index) = (crate::level_load::extracted_root(), crate::level_load::level_index());
+    PORTS[(index as usize).min(19)].get_or_init(|| {
+        let root = crate::level_load::extracted_root();
+        // Each level's overlay read and parsed once (every level's table looks into all of them).
+        static OVERLAYS: crate::level_load::PerLevel<Option<std::sync::Arc<LevelOverlay>>> = [const { std::sync::OnceLock::new() }; 20];
         let overlay = |l: u32| -> Option<std::sync::Arc<LevelOverlay>> {
-            let b = crate::disc_source::level_file(&root, l, "overlay.bin").ok()?;
-            LevelOverlay::parse(&b).ok().map(std::sync::Arc::new)
+            OVERLAYS[(l as usize).min(19)].get_or_init(|| {
+                let b = crate::disc_source::level_file(&root, l, "overlay.bin").ok()?;
+                LevelOverlay::parse(&b).ok().map(std::sync::Arc::new)
+            }).clone()
         };
         let Some(target) = overlay(index) else {
             eprintln!("gameplay: level {index:02} overlay not read: class ports by class number");
@@ -862,11 +936,38 @@ pub fn camera_ports() -> &'static rc_game::follow_camera::level::CameraPorts {
 /// The loaded level's ported class reaction tables (`rc_game::moby_update::creature::react::tables_from_overlays`: the
 /// level's `lvl.vtbl` third words against level 01's tables and the ones reversed on other levels). Built once per process; empty without the overlays (the
 /// class-number fallback).
-pub fn level_reactions() -> &'static std::collections::HashMap<i16, rc_game::moby_update::creature::react::Table> {
+pub fn level_reactions() -> &'static HashMap<i16, rc_game::moby_update::creature::react::Table> {
+    let index = crate::level_load::level_index();
+    let imports = crate::map_load::import_overlays(index);
+    if imports.is_empty() { return own_level_reactions(index); }
+    // A RAC Maker map's imported classes: their own level's tables (crate::map_load); one per set of imports.
+    type Key = (u32, Vec<(u32, Vec<i16>)>);
+    type Tables = HashMap<i16, rc_game::moby_update::creature::react::Table>;
+    static WITH: std::sync::Mutex<Option<HashMap<Key, &'static Tables>>> = std::sync::Mutex::new(None);
+    let mut g = WITH.lock().unwrap_or_else(|e| e.into_inner());
+    let key = (index, imports);
+    if let Some(t) = g.get_or_insert_with(HashMap::new).get(&key) { return t; }
+    let mut tables = own_level_reactions(index).clone();
+    for (l, classes) in &key.1 {
+        let from = own_level_reactions(*l);
+        for c in classes {
+            match from.get(c) {
+                Some(t) => { tables.insert(*c, t.clone()); }
+                None => { tables.remove(c); }
+            }
+        }
+    }
+    let t: &'static Tables = Box::leak(Box::new(tables));
+    g.get_or_insert_with(HashMap::new).insert(key, t);
+    t
+}
+
+/// Level `index`'s own reaction tables (no map imports): built once per level.
+pub(crate) fn own_level_reactions(index: u32) -> &'static HashMap<i16, rc_game::moby_update::creature::react::Table> {
     use rc_formats::level_overlay::LevelOverlay;
-    static T: crate::level_load::PerLevel<std::collections::HashMap<i16, rc_game::moby_update::creature::react::Table>> = [const { std::sync::OnceLock::new() }; 20];
-    crate::level_load::per_level(&T).get_or_init(|| {
-        let (root, index) = (crate::level_load::extracted_root(), crate::level_load::level_index());
+    static T: crate::level_load::PerLevel<HashMap<i16, rc_game::moby_update::creature::react::Table>> = [const { std::sync::OnceLock::new() }; 20];
+    T[(index as usize).min(19)].get_or_init(|| {
+        let root = crate::level_load::extracted_root();
         let overlay = |l: u32| -> Option<LevelOverlay> { LevelOverlay::parse(&crate::disc_source::level_file(&root, l, "overlay.bin").ok()?).ok() };
         let reference = |l: u32| overlay(l).map(std::sync::Arc::new);
         match (overlay(index), overlay(1)) {
@@ -975,39 +1076,42 @@ fn class_joint_lists_where(lv: &crate::level_load::LoadedLevel, want: impl Fn(i1
 /// A class's joint lists: (first byte list, second byte list) per list.
 type ClassLists = HashMap<i16, Vec<(Vec<u8>, Vec<u8>)>>;
 fn class_joint_data_where(lv: &crate::level_load::LoadedLevel, want: impl Fn(i16) -> bool) -> anyhow::Result<ClassLists> {
-    use anyhow::{anyhow, Context};
     let wanted: Vec<&rc_formats::moby::LevelMobyClass> = lv.mobys.classes.iter().filter(|c| want(c.o_class as i16)).collect();
     let mut out = HashMap::new();
-    if wanted.is_empty() { return Ok(out); }
-    let (root, index) = (crate::level_load::extracted_root(), crate::level_load::level_index());
-    let read = |name: &str| crate::disc_source::level_file(&root, index, name);
-    let data = rc_data::level_core_data(&root, index).context("decompressing core_data")?;
-    let core = rc_formats::level::parse_level_core(&read("core_index.bin")?, data.len()).context("parsing core index")?;
-    for c in wanted {
-        let name = format!("moby_class/{:04}", c.o_class);
-        // A class appended from the spaceships file (the loader's ship) has no block in the core: its lists come from
-        // that file (crate::travel_render::ship_joint_lists).
-        let Some(blk) = core.blocks.iter().find(|b| b.name == name) else { continue };
-        let blob = data.get(blk.offset..blk.offset + blk.size).ok_or_else(|| anyhow!("{name} out of range"))?;
-        let lists = (0..256).map_while(|l| rc_formats::gadget::joint_list(blob, &c.class.header, l).ok()).collect();
+    // A class appended from the spaceships file (the loader's ship) has no block in the core: its lists come from that
+    // file (crate::travel_render::ship_joint_lists).
+    for (c, blob) in class_blobs(&wanted)? {
+        let lists = (0..256).map_while(|l| rc_formats::gadget::joint_list(&blob, &c.class.header, l).ok()).collect();
         out.insert(c.o_class as i16, lists);
+    }
+    Ok(out)
+}
+
+/// The class blobs (`moby_class/NNNN` of a level core) of `classes`, each from the level that holds it: the loaded level,
+/// or a RAC Maker import's own level (crate::map_load::class_level); each level's core read once. A class without a
+/// block (the loader's ship, from the spaceships file) is left out.
+fn class_blobs<'c>(classes: &[&'c rc_formats::moby::LevelMobyClass]) -> anyhow::Result<Vec<(&'c rc_formats::moby::LevelMobyClass, Vec<u8>)>> {
+    use anyhow::anyhow;
+    let (root, index) = (crate::level_load::extracted_root(), crate::level_load::level_index());
+    let mut cores: HashMap<u32, (rc_formats::level::LevelCore, std::sync::Arc<[u8]>)> = HashMap::new();
+    let mut out = Vec::new();
+    for &c in classes {
+        let l = crate::map_load::class_level(index, c.o_class);
+        if !cores.contains_key(&l) { cores.insert(l, crate::map_load::level_core(&root, l)?); }
+        let (core, data) = &cores[&l];
+        let name = format!("moby_class/{:04}", c.o_class);
+        let Some(blk) = core.blocks.iter().find(|b| b.name == name) else { continue };
+        out.push((c, data.get(blk.offset..blk.offset + blk.size).ok_or_else(|| anyhow!("level {l:02}: {name} out of range"))?.to_vec()));
     }
     Ok(out)
 }
 
 /// The gait records (`rc_formats::moby_anim::gait_records`) of the level's classes `want` picks, by (class, sequence).
 fn class_gaits(lv: &crate::level_load::LoadedLevel, want: impl Fn(i16) -> bool) -> anyhow::Result<HashMap<(i16, u8), [u32; 20]>> {
-    use anyhow::Context;
     let wanted: Vec<&rc_formats::moby::LevelMobyClass> = lv.mobys.classes.iter().filter(|c| want(c.o_class as i16)).collect();
     let mut out = HashMap::new();
-    if wanted.is_empty() { return Ok(out); }
-    let (root, index) = (crate::level_load::extracted_root(), crate::level_load::level_index());
-    let data = rc_data::level_core_data(&root, index).context("decompressing core_data")?;
-    let core = rc_formats::level::parse_level_core(&crate::disc_source::level_file(&root, index, "core_index.bin")?, data.len()).context("parsing core index")?;
-    for c in wanted {
-        let name = format!("moby_class/{:04}", c.o_class);
-        let Some(blob) = core.blocks.iter().find(|b| b.name == name).and_then(|b| data.get(b.offset..b.offset + b.size)) else { continue };
-        for (seq, rec) in rc_formats::moby_anim::gait_records(blob, &c.class) { out.insert((c.o_class as i16, seq), rec); }
+    for (c, blob) in class_blobs(&wanted)? {
+        for (seq, rec) in rc_formats::moby_anim::gait_records(&blob, &c.class) { out.insert((c.o_class as i16, seq), rec); }
     }
     Ok(out)
 }
@@ -1228,7 +1332,7 @@ fn setup(
     }
     let spawn_moby = table.mobys[hero_id].clone();
     let opts = state.as_ref().map(|s| s.0.options());
-    let options = opts.map_or(GameOptions::default(), |o| o.game_options());
+    let options = camera_inverted(opts.map_or(GameOptions::default(), |o| o.game_options()));
     // srand(1234), hero init (ground snap, mode 2, the fidget-timer draw), the camera behind him.
     let mut game = Game::new(coll, table, hero_id, options, lv.death_z);
     if let Some(s) = &session { game.hero.health = s.0.hp; }
@@ -1570,6 +1674,7 @@ fn setup(
         if svc.water.sim.is_some() { "initialised on the game stream" } else { "none" }, dynamic.pal_slots
     );
     commands.insert_resource(PlayView { view: game.camera.out, tan_half_fov: play_camera::GAME_TAN_HALF_FOV, far: crate::game_camera::FAR });
+    crate::map_logic::reset();
     let mut play = Play {
         game,
         ratchet,
@@ -1620,6 +1725,7 @@ fn setup(
         respawn: false,
         death_pending: false,
         frozen_hint: false,
+        editor_children: HashMap::new(),
     };
     publish_anim(&mut play, anim.as_deref_mut());
     drive_statics(&mut play, lv, &mut occl, anim.as_deref_mut());
@@ -1660,6 +1766,10 @@ fn hero_level_setup(hero: &mut Hero, back: Option<&BackPacks>, level: u32) {
         if let Some(s) = clank_scale { hero.set_clank_scale(*s); }
     }
     hero.idle.level = level as i32;
+    // A RAC Maker map's ability profile on its host level (crate::map_load; None keeps the level's rules).
+    if let Some(def) = crate::map_load::on(level) {
+        hero.abilities = rc_game::hero::Abilities { rails: def.abilities.rails, cables: def.abilities.cables };
+    }
 }
 
 /// MobyProc's deferral of the scheduler-driven static mobys (crate::shadow_render's casters of the last frame, or
@@ -1671,6 +1781,56 @@ fn caster_order(play: Option<Res<Play>>, shadows: Option<Res<crate::shadow_rende
         let Some(m) = table.mobys.get(id) else { continue };
         occl.set_late(ii, shadows.as_ref().is_some_and(|s| s.deferred.contains(&id)) || m.mode & 0x800 != 0);
     }
+}
+
+/// RAC Maker (crate::editor): where the game's table has static instance `ii` after the load pass (a class may move
+/// itself there from its home level's data).
+pub fn editor_instance_at(p: &Play, ii: usize) -> Option<[f32; 3]> {
+    let &(id, _, _) = p.driven.iter().find(|d| d.1 == ii)?;
+    p.game.mobys.mobys.get(id).map(pos3)
+}
+
+/// RAC Maker (crate::editor), with the tick frozen: draws static instance `ii` at `at` (position; yaw about z, the
+/// scale kept) or hides it (None) at once. Only the drawing moves: the reload the edit starts puts the game in step.
+///
+/// The pieces it made at load (the dynamic mobys standing on its spot, as the tank's treads) move and turn with it:
+/// they are found the first time it moves, then carried by the same turn and shift in the table (the next upload
+/// draws them; the tick stays frozen).
+pub fn editor_show(p: &mut Play, occl: &mut MobyOcclusion, ii: usize, at: Option<([f32; 3], f32)>) {
+    let Some(&(id, _, _)) = p.driven.iter().find(|d| d.1 == ii) else { return };
+    if !p.editor_children.contains_key(&ii) {
+        let table = &p.game.mobys;
+        let m = &table.mobys[id];
+        let o = pos3(m);
+        let kids = (table.first_dynamic..table.mobys.len())
+            .filter(|&k| { let c = &table.mobys[k]; c.state < 0x80 && (0..3).all(|i| (c.position[i] - o[i]).abs() < 1.0) })
+            .map(|k| (k, table.mobys[k].position, table.mobys[k].rows, table.mobys[k].mode))
+            .collect();
+        p.editor_children.insert(ii, (o, m.rows[0][1].atan2(m.rows[0][0]), kids));
+    }
+    let (o, yaw0, kids) = p.editor_children[&ii].clone();
+    let scale = p.game.mobys.mobys[id].scale;
+    match at {
+        Some((pos, yaw)) => {
+            let (s, c) = yaw.sin_cos();
+            occl.drive(ii, pos, [[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]], scale, None, false);
+            let (ds, dc) = (yaw - yaw0).sin_cos();
+            let turn = |v: [f32; 4]| [v[0] * dc - v[1] * ds, v[0] * ds + v[1] * dc, v[2], v[3]];
+            for (k, kp, krows, kmode) in kids {
+                let r = turn([kp[0] - o[0], kp[1] - o[1], kp[2] - o[2], 0.0]);
+                let m = &mut p.game.mobys.mobys[k];
+                m.position = [pos[0] + r[0], pos[1] + r[1], pos[2] + r[2], kp[3]];
+                m.rows = [turn(krows[0]), turn(krows[1]), turn(krows[2]), krows[3]];
+                m.mode = kmode;
+            }
+        }
+        None => {
+            let m = &p.game.mobys.mobys[id];
+            occl.drive(ii, pos3(m), rows3(&m.rows), scale, None, true);
+            for (k, _, _, kmode) in kids { p.game.mobys.mobys[k].mode = kmode | 0x01; }
+        }
+    }
+    p.uploaded = None;
 }
 
 /// The table → the renderer for the scheduler-driven static mobys (module doc): placement, light block (for
@@ -1810,6 +1970,17 @@ fn death_reload(p: &mut Play, lv: &crate::level_load::LoadedLevel, state: Option
     // The class table as the load builds it (the loader ORs each instance's mode bits into it again).
     let mut classes = class_table(lv, &external_update_fn);
     let ship_ii = p.ship.map(|(_, ii)| ii);
+    // A RAC Maker map that resets on death (crate::map_load): this visit's death, kill and collected bits are dropped,
+    // so everything comes back as at the first load. The checkpoint record stays.
+    if crate::map_load::on(p.level).is_some_and(|d| d.reset_on_death) {
+        let (s, level) = (&mut p.svc.save, p.level);
+        s.death.retain(|&(l, _)| l != level);
+        s.death_level.clear();
+        s.killed.clear();
+        s.collected.clear();
+        s.visit.clear();
+        s.checkpoint_visit.clear();
+    }
     let (table, statics, ship_id) = match moby_table(lv, &mut classes, ship_ii, state, p.level, Some(&p.svc.save), Some(p.missions.slot)) {
         Ok(t) => t,
         Err(e) => {
@@ -1962,6 +2133,17 @@ pub(crate) struct RatchetMesh;
 /// every frame, written directly, so no other writer's leftover sticks (a scene's, travel's or the vendor's show at
 /// their end: they leave his meshes to this). Meshes those hides hold are skipped while they hold them.
 #[allow(clippy::type_complexity)]
+/// ReRAC's camera rule (user request, 2026-10-22): RAC1's camera always turns inverted, left / right and up / down,
+/// whatever the Options menu's camera rows say. Deterministic runs keep the game's own rule (their recorded pads
+/// were made with it).
+fn camera_inverted(mut o: GameOptions) -> GameOptions {
+    if !crate::determinism::deterministic() {
+        o.camera.yaw_normal = false;
+        o.camera.pitch_normal = false;
+    }
+    o
+}
+
 fn ratchet_visibility(
     play: Option<ResMut<Play>>,
     mut q: Query<(&mut Visibility, Has<crate::scene_render::SceneHidden>, Has<crate::travel_render::TravelHidden>, Has<crate::interact_render::VendorHidden>), With<RatchetMesh>>,
@@ -2231,6 +2413,7 @@ fn tick(
     if std::mem::take(&mut p.death_pending) {
         let checkpoint = p.svc.save.checkpoint.is_some();
         death_reload(p, lv, state.as_deref().map(|s| &s.0), occl.as_deref_mut(), anim.as_deref_mut(), particles.as_deref_mut());
+        crate::map_logic::death_reload(crate::map_load::on(p.level).is_none_or(|d| d.reset_on_death));
         // `0x29adc8`'s copy of the checkpoint area 0x1bb6b0..0x1bc310 over 0x1baa50..0x1bb6b0 (zeroed without a
         // checkpoint): the live visit records 0x1baaa0 become the checkpoint's 0x1bb700, and this visit's kills 0x1baea4
         // become a copy of the never-again bytes 0x1bbb04. Kills a checkpoint did not promote before the death are
@@ -2261,6 +2444,11 @@ fn tick(
         Some(s) => s.at(mode.as_ref().map_or(p.game.counter.saturating_sub(1), |m| m.loop_frame)),
         None if *source == CameraSource::Play => pad.0,
         None => PadInput::neutral(),
+    };
+    // A RAC Maker camera zone: the stick as seen through the zone's camera (crate::map_logic).
+    let input = {
+        let h = &p.game.hero;
+        crate::map_logic::steer(input, [h.pos[0].to_f32(), h.pos[1].to_f32(), h.pos[2].to_f32()], h.group, &p.game.camera.out)
     };
     // Dev builds: the noclip takes the pad (the tick sees it neutral; noclip_step moves the hero after it).
     let noclip_pad = p.noclip.map(|_| input);
@@ -2314,10 +2502,14 @@ fn tick(
         // PromptTick 0x278eb8 and this tick's pad for the "use" system (moby_update::interact), before the loop.
         w.svc.interact.begin_tick(hero.loop_in.pad.pressed, hero.state);
         n_active = sched.tick(&mut w);
+        // RAC Maker maps: the checkpoint records and sounds their zones asked for (crate::map_logic).
+        crate::map_logic::moby_pass(&mut w);
         // RC_UNPORTED=1: the calls the moby loop met without a port so far (`Services::unported`), every 600 ticks.
         if counter.is_multiple_of(600) && std::env::var("RC_UNPORTED").is_ok_and(|v| v == "1") {
             eprintln!("unported after tick {counter}: {:?}", w.svc.fx.unported);
         }
+        // The RAC Maker spawn test's child run (crate::spawn_test): after RC_SPAWN_TICKS ticks, the per-class report.
+        crate::spawn_test::report_and_exit(counter, &w.svc.fx);
     };
     let mut parts = |hero: &Hero, cam: &CameraView, rng: &mut Rng, counter: u64| {
         if let Some(sim) = parts_cell.borrow_mut().as_deref_mut() {
@@ -2373,7 +2565,7 @@ fn tick(
         // The cheat bytes 0x15edb0 (rc_game::cheats) for the tick and the hero (GameOptions) and the moby loop
         // (Services::cheats), and the options the game reads every tick (the mirror 0x15edb4, the camera's).
         let g = &gs.0.global;
-        let mut o = gs.0.options().game_options();
+        let mut o = camera_inverted(gs.0.options().game_options());
         o.cheats = rc_game::cheats::Cheats(g.cheats_active);
         o.cheat_entry = g.game_beaten != 0 || g.completes != 0;
         p.game.options = o;
@@ -2496,6 +2688,8 @@ fn tick(
     // The help system (rc_game::help), then the play time 0x15eea4 (`FUN_002ab960` at the tick's end).
     help_frame(p, &report, scene_frame || world_frame, state.as_deref_mut().map(|s| &mut s.0), audio_cell.borrow_mut().as_deref_mut());
     map_tick(p, &report, state.as_deref().map(|s| &s.0));
+    // RAC Maker maps: zones and rules (crate::map_logic).
+    crate::map_logic::after_tick(p);
     if let Some(gs) = state.as_mut() { gs.0.global.play_time += 1; }
     // Moby sounds: queued and counted (no moby-sound entry in rc_game::audio yet).
     for ev in p.svc.sounds.drain(..) { *p.sounds.entry((ev.o_class, ev.index)).or_default() += 1; }

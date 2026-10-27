@@ -17,6 +17,7 @@ pub mod prepare;
 /// SHA-1, shared with the loader snapshots (it lives in rc-formats).
 pub use rc_formats::sha1;
 pub mod space;
+pub mod thumbs;
 pub mod verify;
 mod workers;
 

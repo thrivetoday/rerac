@@ -116,6 +116,8 @@ pub struct ShipGlobals {
     pub sub: i32,
     /// 0x13e054: the substate's tick (−1 after an entry, +1 at the start of each `GameStateUpdate`).
     pub tick: i16,
+    /// RAC Maker maps: the ship takes no one aboard until the map's goal is reached.
+    pub locked: bool,
     /// 0x13e0f0 / 0x13e2f0 / 0x13e080 / 0x13e084: the trail ring (the fly-away's and the flight's).
     pub trail: ship::Trail,
 }

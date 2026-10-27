@@ -49,7 +49,6 @@ use rc_formats::moby_anim::{self, MobyAnimClass};
 use rc_formats::moby_spawn::{self, ChangeAt, SpawnEnv, SpawnState};
 use rc_formats::occlusion::OcclBits;
 use rc_formats::tfrag_light::ps2;
-use rc_formats::level;
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -73,8 +72,8 @@ pub fn enabled() -> bool { !std::env::var("RC_SPAWN_RULES").is_ok_and(|v| v.trim
 struct Env<'a> {
     splines: Vec<Vec<[f32; 4]>>,
     positions: Vec<[f32; 3]>,
-    root: &'a Path,
-    index: u32,
+    /// The loaded level's collision (a RAC Maker map's floors on its host level, crate::map_load).
+    mesh: Option<&'a collision::Collision>,
     triangles: OnceCell<Vec<CollisionTriangle>>,
     /// (instance position, ground) of every probe, for the report.
     probes: std::cell::RefCell<Vec<([f32; 3], f32)>>,
@@ -82,14 +81,9 @@ struct Env<'a> {
 
 impl Env<'_> {
     fn triangles(&self) -> &[CollisionTriangle] {
-        self.triangles.get_or_init(|| {
-            let load = || -> Result<Vec<CollisionTriangle>> {
-                let read = |n: &str| crate::disc_source::level_file(self.root, self.index, n);
-                let core_data = rc_data::level_core_data(self.root, self.index).context("decompressing core_data")?;
-                let core = level::parse_level_core(&read("core_index.bin")?, core_data.len())?;
-                Ok(collision::collision_triangles(&collision::parse_collision(&core, &core_data)?))
-            };
-            load().unwrap_or_else(|e| { warn!("moby spawn: no collision for the ground probe ({e:#}); every probe misses"); Vec::new() })
+        self.triangles.get_or_init(|| match self.mesh {
+            Some(m) => collision::collision_triangles(m),
+            None => { warn!("moby spawn: no collision for the ground probe; every probe misses"); Vec::new() }
         })
     }
 }
@@ -142,7 +136,9 @@ pub fn apply_load_pass(root: &Path, index: u32, level: &mut LoadedLevel, save: &
         let states = m.instances.iter().map(|i| { let mut s = SpawnState::plain(i.o_class, anim_of(i.o_class)); s.runs_load_pass = false; s }).collect();
         return Ok(MobySpawn { enabled: false, states, ship: None });
     }
-    let gameplay = rc_data::level_gameplay(root, index).context("decompressing gameplay_ntsc")?;
+    // The loaded level's gameplay file and collision (not re-read: a RAC Maker map replaced the disc's, crate::map_load).
+    // Copies: the ship below adds to the level (both are far cheaper than the decompression and parse they replace).
+    let (gameplay, mesh) = (level.gameplay.clone(), level.collision.clone());
     // The loader's spawn test with the level's save bits (`crate::gameplay::level_spawn_save`: the same ones the game's
     // moby table is built with). Records it rejects are not created: hidden here; the pvar moby links and moby
     // positions use the runtime indices.
@@ -152,8 +148,7 @@ pub fn apply_load_pass(root: &Path, index: u32, level: &mut LoadedLevel, save: &
     let env = Env {
         splines: gameplay::parse_splines(&gameplay).context("parsing paths")?,
         positions: m.instances.iter().zip(&tests).filter(|(_, t)| t.spawn).map(|(i, _)| i.position).collect(),
-        root,
-        index,
+        mesh: mesh.as_ref(),
         triangles: OnceCell::new(),
         probes: Default::default(),
     };
