@@ -413,6 +413,31 @@ the actions half way, a cut back; Ratchet's stick still); the stick follows a ca
 (`map_logic::steer`, not while grinding); objects' load-made pieces follow a moved object in the live preview
 (`gameplay::editor_show`); `RC_EDITOR_TAB` opens a tab without the menu.
 
+## Phase 5: look and feel (first slice, 2026-10-27)
+
+`World::light` (sun azimuth / elevation, sun and ambient colours, `shade`: ambient occlusion from the heights 1.5 and
+4 units round) replaces the fixed baked sun of the map's meshes (`map_load::Rig`, `lit`, `open_sky`; the default
+reproduces the old light exactly); edge pieces, scatter and rail looks get vertex colours from it too. `World::palette`
+(hue, saturation, brightness, tint, `objects`) recolours the terrain and piece textures (`Palette::apply`, HSV) and,
+with `objects`, every moby texture in `level_load`. The map's own geometry takes the level fog as Bevy's
+`DistanceFog` on the play / fly camera (`map_fog`; the game's renderers fog themselves). Fixed: the map's own fog
+distances were written in units, the settings hold 1/1024 units. Themes (`editor::THEMES`): seven looks setting sky,
+fog, light, palette and song.
+
+Second slice: `World::lights` (point lights: baked into the map's meshes, `lit_at`, and the first four put in the
+game's point-light bank's last slots each tick, `map_logic`, so MobyProc lights the objects near them),
+`World::sky_layers` (per shell hidden / tint, `sky_render::spawn_shells`), `World::recolour` (material groups: one
+terrain texture's palette), `Object::tint` (the record's ambient colour scaled), and the readability warnings on save
+(objects' colours shifted hard, a fog full within 70 units). The vertex colour brush was there already (Sculpt >
+Shade).
+
+Feedback round 11: `MapDef::thumb_view` (Set thumbnail keeps the camera; a save retakes the picture from it and puts
+the camera back, `snap_view`; "+ picture" by Save, `thumb_on_save=0` in settings.txt turns it off). The island and
+path panels' Colour section (`Patch::tint` / `Walkway::tint` through `tinted()`, and that texture's `World::recolour`).
+Live: World changes call `map_load::set` at once (decoded foreign textures cached, `map_fog` reads the map's own fog);
+the sky and moby palette still come with the reload. The skies' own motion (sky_stars twinkle / shooting stars, the
+turning shells of `level_rotations`) switchable: `World::no_sky_stars`, `World::sky_still`.
+
 ## Camera (all RAC1 play, not only maps)
 
 RAC1's camera always turns inverted, left / right and up / down (user request 2026-10-22), whatever the Options

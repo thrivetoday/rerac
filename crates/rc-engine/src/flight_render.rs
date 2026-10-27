@@ -156,7 +156,7 @@ fn flight_sky() -> Option<Arc<crate::sky_render::LevelSky>> {
     let block = l.sky_block().map_err(|e| eprintln!("flight: sky: {e}")).ok()?;
     let sky = rc_formats::sky::parse_sky_block(block).map_err(|e| eprintln!("flight: sky: {e}")).ok()?;
     let textures = rc_formats::sky::parse_sky_textures(block, &sky).map_err(|e| eprintln!("flight: sky textures: {e}")).ok()?;
-    Some(Arc::new(crate::sky_render::LevelSky { level: u32::MAX, sky, textures, sprite_scratch: Vec::new(), fill_below: None, raise: 0.0, turn: 0.0 }))
+    Some(Arc::new(crate::sky_render::LevelSky { level: u32::MAX, sky, textures, sprite_scratch: Vec::new(), fill_below: None, raise: 0.0, turn: 0.0, layers: Vec::new(), no_stars: false, still: false }))
 }
 
 /// The flight's sky (module docs): spawned with the flight's first drawn frame, each shell's SkyM from the frame's

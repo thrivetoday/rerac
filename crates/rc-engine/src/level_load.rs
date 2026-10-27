@@ -184,6 +184,16 @@ pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
         }
         None => Vec::new(),
     };
+    // The map's palette over the objects' textures too, when it says so (the pickups' and Ratchet's are the host's
+    // textures as well: all of them shift together).
+    if let Some(pal) = map.as_ref().and_then(|d| d.world.palette).filter(|p| p.objects) {
+        for t in textures.iter_mut().filter(|t| t.table == texture::TextureTable::Moby) {
+            for px in t.texture.rgba.chunks_mut(4) {
+                let c = pal.apply([px[0], px[1], px[2]]);
+                px[..3].copy_from_slice(&c);
+            }
+        }
+    }
     stage("map patch + imports");
     let fog = crate::game_camera::LevelFog::parse(&gameplay).context("parsing level settings")?;
     let background = crate::game_camera::level_background(&gameplay).context("parsing level settings")?;
@@ -234,6 +244,8 @@ pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
     if let (Some(def), Some(ls)) = (map.as_ref(), sky.as_mut()) {
         ls.fill_below = Some(crate::sky_render::horizon_colour(ls));
         (ls.raise, ls.turn) = (def.world.sky_raise.to_radians(), def.world.sky_turn.to_radians());
+        ls.layers = def.world.sky_layers.clone();
+        (ls.no_stars, ls.still) = (def.world.no_sky_stars, def.world.sky_still);
     }
     let occlusion = crate::occlusion::load(&core, &core_data, &gameplay, &tfrags, &ties.instances, &mobys.instances).context("loading occlusion")?;
     stage("sky + occlusion");

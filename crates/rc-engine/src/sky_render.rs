@@ -87,6 +87,11 @@ pub struct LevelSky {
     /// RAC Maker maps: the sky raised (radians of elevation, + up) and turned about the up axis (radians).
     pub raise: f32,
     pub turn: f32,
+    /// RAC Maker maps: per shell, hidden and its colour (`World::sky_layers`).
+    pub layers: Vec<rc_map::SkyLayer>,
+    /// RAC Maker maps: no stars and shooting stars; the layers (clouds) not turning.
+    pub no_stars: bool,
+    pub still: bool,
 }
 
 /// The colour a sky's horizon band ends in: the bottom rows of its widest texture (the horizon band of most planets),
@@ -119,7 +124,7 @@ pub fn load(core: &LevelCore, core_data: &[u8], level: u32) -> Result<Option<Lev
         Ok(o) if o > 0 => block.get(o..o + scratch_len).map(<[u8]>::to_vec).unwrap_or_default(),
         _ => Vec::new(),
     };
-    Ok(Some(LevelSky { level, sky, textures, sprite_scratch, fill_below: None, raise: 0.0, turn: 0.0 }))
+    Ok(Some(LevelSky { level, sky, textures, sprite_scratch, fill_below: None, raise: 0.0, turn: 0.0, layers: Vec::new(), no_stars: false, still: false }))
 }
 
 /// Whether the level's sky dispatch zeroes header +4 (`clear_screen`) every frame, i.e. the frame is cleared
@@ -289,7 +294,7 @@ fn spawn_sky(
         println!("sky: none in this level; the frame is cleared to the level background");
         return;
     };
-    let rotations = level_rotations(ls.level);
+    let rotations = if ls.still { Vec::new() } else { level_rotations(ls.level) };
     let speed = match std::env::var("RC_SKY_ROT") { Ok(v) => v.trim().parse().unwrap_or(1.0), Err(_) => 1.0 };
     let counter = tick_counter(0, speed);
     // The star step runs after shells 0..before_shell (SkyDrawShell skips shells ≥ the header count, so a
@@ -373,6 +378,10 @@ pub(crate) fn spawn_shells(
             star_order = Some(order);
             order += 1;
         }
+        // A map's layer look: hidden, or tinted (its vertex colours scaled: the textured shells' modulate the texture).
+        let look = ls.layers.get(si).copied().unwrap_or_default();
+        if look.hidden { continue; }
+        let tint = look.tint.map(|c| c as f32 / 255.0);
         // Runs of consecutive faces with the same texture, in cluster and face order: one draw each.
         let mut runs: Vec<(u8, Vec<sky::SkyGsVertex>)> = Vec::new();
         for c in &shell.clusters {
@@ -421,6 +430,7 @@ pub(crate) fn spawn_shells(
                     let k = k * k * (3.0 - 2.0 * k);
                     for i in 0..3 { c[i] = c[i] * (1.0 - k) + fill[i] as f32 * k; }
                 }
+                for i in 0..3 { c[i] *= tint[i]; }
                 c
             }).collect();
             let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)

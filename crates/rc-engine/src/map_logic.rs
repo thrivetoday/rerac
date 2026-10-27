@@ -265,6 +265,18 @@ pub fn after_tick(p: &mut crate::gameplay::Play) {
                 }
             }
         }
+        // The map's point lights in the game's bank (its last slots, so the explosions keep the first): MobyProc lights
+        // the objects near them with them (the terrain has them baked in).
+        for (k, l) in def.world.lights.iter().take(4).enumerate() {
+            let slot = 7 - k;
+            let light = rc_game::point_lights::PointLight {
+                color: l.colour.map(|c| c as f32 / 255.0 * l.intensity),
+                intensity: l.intensity.min(1.0),
+                pos: l.position,
+                radius: l.radius,
+            };
+            if p.svc.point_lights.slots[slot] != Some(light) { p.svc.point_lights.slots[slot] = Some(light); }
+        }
         // A ship takes Ratchet aboard once the goal is reached.
         let has_goal = def.zones.iter().any(|z| matches!(z.kind, ZoneKind::Goal)) || def.rules.iter().any(|r| r.then.iter().any(|t| matches!(t, Then::Goal)));
         if def.ship.is_some() { p.svc.travel.locked = (has_goal && l.goal.is_none()) || l.goal_at.is_some(); }

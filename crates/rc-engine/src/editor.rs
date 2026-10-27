@@ -527,6 +527,15 @@ pub struct Editor {
     globes: HashMap<u32, Option<egui::TextureId>>,
     /// The World tab's song list: the planet whose songs show.
     song_planet: Option<u32>,
+    /// The thumbnail: its camera to be remembered (Set thumbnail), a retake asked for (a save), and the camera to put
+    /// back after a retake (transform, yaw, pitch).
+    thumb_record: bool,
+    thumb_retake: bool,
+    thumb_restore: Option<(Transform, f32, f32)>,
+    /// World tab: a point light asked for (placed where the camera looks), the light picked, the sky layer counts.
+    light_add: bool,
+    light_sel: Option<usize>,
+    sky_shells: HashMap<u32, usize>,
     radio_want: Option<Option<usize>>,
     /// Set thumbnail: the file the next frames' capture goes to (the markers hidden for it), and frames to wait.
     thumb_shot: Option<(PathBuf, u8)>,
@@ -609,6 +618,8 @@ struct Settings {
     help_seen: bool,
     /// The main menu's order of the maps (file names), as the cards were dragged.
     order: Vec<String>,
+    /// A save takes the map's picture again from where it was set (off: `thumb_on_save=0`).
+    no_thumb_on_save: bool,
 }
 
 /// The editor's folder: settings and the guide.
@@ -629,6 +640,7 @@ impl Settings {
             if let Some(p) = line.strip_prefix("recent=") { s.recent.push(PathBuf::from(p)); }
             if line == "help_seen=1" { s.help_seen = true; }
             if let Some(f) = line.strip_prefix("order=") { s.order.push(f.to_string()); }
+            if line == "thumb_on_save=0" { s.no_thumb_on_save = true; }
         }
         s
     }
@@ -637,6 +649,7 @@ impl Settings {
         if self.help_seen { t += "help_seen=1\n"; }
         for r in &self.recent { t += &format!("recent={}\n", r.display()); }
         for f in &self.order { t += &format!("order={f}\n"); }
+        if self.no_thumb_on_save { t += "thumb_on_save=0\n"; }
         let _ = std::fs::create_dir_all(maker_dir()).and_then(|_| std::fs::write(maker_dir().join("settings.txt"), t));
     }
     /// `path` first in the recent list (at most 10).
@@ -756,6 +769,12 @@ const HELP: [(&str, &[&str]); 11] = [
     ("World", &[
         "World tab: another planet's sky (with its light and fog), your own fog, and the map's song.",
         "Under the sky tiles: raise moves the sky up or down, turn spins it round (where its sun and mountains are).",
+        "Themes: a whole look in one click (sky, fog, light, colours, song): Toxic, Frozen, Volcanic, Night City, Desert Noon, Alien Dusk, Ruins.",
+        "Light: your own sun (direction, height, colour), the ambient, and shade in hollows for your islands and paths. Colours: hue, saturation, brightness and a tint for the whole map (Objects too: also the enemies and pickups).",
+        "Colours also recolours one ground texture everywhere it is used. Lights: add point lights where the camera looks (colour, reach, strength). Sky layers: hide or tint each layer of the sky.",
+        "An island's or a path's panel has Colour: tint just it, or change its texture's colours everywhere. World changes show at once; the sky and objects' colours change when you let go of the slider.",
+        "Some skies have twinkling and shooting stars and slowly drifting clouds: switch them off under the sky tiles (Stars and shooting stars, Clouds drift).",
+        "An object's panel has Tint: colour that one object (a golden statue, a red crate).",
         "Song: Use picks what the map plays; the host's song or Silence also work. Press ▶ to listen while you edit (the radio), ■ to stop.",
         "Ratchet's ship (map settings, right panel with nothing selected): the level starts with it landing; after the goal, walk back to it and press △ to board and finish.",
         "With a ship, Ratchet starts by its hatch (the blue circle moves with it): make sure there is ground there and between him and the ship.",
@@ -773,6 +792,7 @@ const HELP: [(&str, &[&str]); 11] = [
         "Every save keeps a backup of the version it replaces; unsaved work is backed up every 5 minutes. Restore any of them from the Maps tab.",
         "Main menu: click a map for its picture, versions and backups. Save version keeps a named copy that is never pruned. Drag a card to put your maps in your own order.",
         "Set thumbnail (top bar): fly the camera to a nice view and press it; the picture shows in the main menu.",
+        "+ picture (next to Save): each save takes the picture again from that same spot, with your new edits in it.",
     ]),
     ("All keys", &[
         "Right mouse + move: look around.",
@@ -844,7 +864,7 @@ impl Plugin for EditorPlugin {
                 walk: None, walk_drawing: false, walk_first: None, walk_spec: rc_map::walkway::Walkway { cut: true, ..rc_map::walkway::Walkway::new(vec![[0.0; 3], [1.0, 0.0, 0.0]], 4.0) }, walk_lift: 0.0,
                 walk_hover: None, walk_drag: None, walk_at: None,
                 rail: None, rail_drawing: false, rail_first: None, rail_lift: 1.0, rail_smooth: true, rail_hover: None, rail_drag: None, rail_point: None, rail_axis: None, rail_at: None, show_collision: false, collision_view: None, warnings: Vec::new(),
-                menu: main_menu, thumb_shot: None, zone: (tool == Tool::Logic && !def.zones.is_empty()).then_some(0), zone_new: None, zone_drag: None, zone_ghost: None, help_query: String::new(), view_snap: None, radio: None, radio_menu: false, radio_want: None, rail_look: Some("kerwan".into()), globes: HashMap::new(), song_planet: None,
+                menu: main_menu, thumb_shot: None, zone: (tool == Tool::Logic && !def.zones.is_empty()).then_some(0), zone_new: None, zone_drag: None, zone_ghost: None, help_query: String::new(), view_snap: None, radio: None, radio_menu: false, radio_want: None, rail_look: Some("kerwan".into()), globes: HashMap::new(), song_planet: None, light_add: false, light_sel: None, sky_shells: HashMap::new(), thumb_record: false, thumb_retake: false, thumb_restore: None,
                 island: IslandSpec { shape: Shape::Round, size: 24.0, height: 8.0, depth: 8.0, edge: None, texture: Some(AssetId { game: rc_map::Game::Rac1, level: 1, kind: AssetKind::TfragTexture, number: 8 }), seed: 1 }, square: false, invert: false, plateau: 3.0, paint: None, help: (!settings.help_seen).then_some(0), settings,
                 last_backup: std::time::Instant::now(), floor_edit: None, gizmo: None, ranges: HashMap::new(), press: None, moved_away: HashMap::new(),
             })
@@ -1256,6 +1276,18 @@ fn map_load_level_sky(root: &std::path::Path, level: u32) -> Option<rc_formats::
     Some(rc_formats::texture::Texture { width: stars.width, height: stars.height, rgba })
 }
 
+/// How many layers (shells) a level's sky has (read once).
+fn sky_layer_count(ed: &mut Editor, level: u32) -> usize {
+    if let Some(&n) = ed.sky_shells.get(&level) { return n; }
+    let root = crate::level_load::extracted_root();
+    let n = crate::map_load::level_core(&root, level).ok().and_then(|(core, data)| {
+        let block = rc_formats::sky::sky_block(&core, &data).ok()??;
+        rc_formats::sky::parse_sky_block(block).ok().map(|s| s.shells.len())
+    }).unwrap_or(0);
+    ed.sky_shells.insert(level, n);
+    n
+}
+
 /// A square tile: a picture (or a spark without one) and a name under it, the full text on hover. Clicked: true.
 fn picture_tile(ui: &mut egui::Ui, tex: Option<egui::TextureId>, label: &str, hint: &str, on: bool, size: f32) -> bool {
     let (rect, r) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
@@ -1289,11 +1321,105 @@ fn tile_rows(ui: &mut egui::Ui, n: usize, per_row: usize, mut draw: impl FnMut(&
     }
 }
 
+/// An island's or a path's colour (its panel): its own tint, and its texture's colours wherever that texture is used
+/// (`World::recolour`). The texture's colours change the map at once (drawn again live).
+fn colour_section(ui: &mut egui::Ui, ed: &mut Editor, tint: &mut Option<[u8; 3]>, texture: Option<AssetId>, what: &str) {
+    egui::CollapsingHeader::new(egui::RichText::new("Colour").strong()).id_salt(("colour", what.to_string())).default_open(true).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            let mut on = tint.is_some();
+            if ui.checkbox(&mut on, format!("Tint this {what}")).on_hover_text(format!("Colours this {what} only (its light): darker, warmer, mossy...")).changed() {
+                *tint = on.then_some([255, 220, 180]);
+            }
+            if let Some(c) = tint.as_mut() { ui.color_edit_button_srgb(c); }
+        });
+        let Some(id) = texture else { return };
+        let k = ed.def.world.recolour.iter().position(|r| r.0 == id);
+        let mut on = k.is_some();
+        if ui.checkbox(&mut on, "Its texture's colours, everywhere").on_hover_text("Changes this texture on every island and path that uses it (World tab > Colours lists them all)").changed() {
+            ed.checkpoint();
+            if on { ed.def.world.recolour.push((id, rc_map::Palette::default())); } else if let Some(k) = k { ed.def.world.recolour.remove(k); }
+            crate::map_load::set(ed.def.clone());
+            ed.changed();
+        }
+        if let Some(k) = ed.def.world.recolour.iter().position(|r| r.0 == id) {
+            let mut pal = ed.def.world.recolour[k].1;
+            ui.add(egui::Slider::new(&mut pal.hue, -180.0..=180.0).suffix("°").text("hue"));
+            ui.add(egui::Slider::new(&mut pal.saturation, 0.0..=2.0).text("saturation"));
+            ui.add(egui::Slider::new(&mut pal.brightness, 0.3..=1.7).text("brightness"));
+            ui.horizontal(|ui| {
+                ui.color_edit_button_srgb(&mut pal.tint);
+                ui.add(egui::Slider::new(&mut pal.tint_amount, 0.0..=1.0).text("tint"));
+            });
+            pal.hue = pal.hue.round();
+            pal.saturation = (pal.saturation * 20.0).round() / 20.0;
+            pal.brightness = (pal.brightness * 20.0).round() / 20.0;
+            pal.tint_amount = (pal.tint_amount * 20.0).round() / 20.0;
+            if pal != ed.def.world.recolour[k].1 {
+                if !ed.coalescing { ed.checkpoint(); }
+                ed.coalescing = true;
+                ed.def.world.recolour[k].1 = pal;
+                crate::map_load::set(ed.def.clone());
+                ed.changed();
+            }
+        }
+    });
+}
+
+/// A theme (design doc: "Theme presets"): a sky, a fog, a light, a palette and a song in one click.
+struct Theme {
+    name: &'static str,
+    about: &'static str,
+    sky: u32,
+    fog: ([u8; 3], f32, f32),
+    sun: (f32, f32, [u8; 3]),
+    ambient: [u8; 3],
+    shade: f32,
+    /// Hue, saturation, brightness, tint, tint amount.
+    palette: (f32, f32, f32, [u8; 3], f32),
+    song: (u32, u32),
+}
+
+const THEMES: [Theme; 7] = [
+    Theme { name: "Toxic", about: "Green haze, sickly light, Orxon's sky", sky: 10, fog: ([60, 140, 40], 20.0, 160.0), sun: (200.0, 40.0, [200, 255, 160]), ambient: [70, 110, 60], shade: 0.5, palette: (50.0, 1.3, 0.95, [180, 255, 150], 0.3), song: (10, 0) },
+    Theme { name: "Frozen", about: "Pale blue, bright and cold, Kalebo's sky", sky: 16, fog: ([200, 215, 235], 40.0, 260.0), sun: (240.0, 35.0, [230, 240, 255]), ambient: [150, 160, 180], shade: 0.3, palette: (160.0, 0.45, 1.15, [200, 230, 255], 0.4), song: (16, 0) },
+    Theme { name: "Volcanic", about: "Red smoke and ember light, Gaspar's sky", sky: 9, fog: ([120, 40, 20], 20.0, 200.0), sun: (300.0, 30.0, [255, 170, 110]), ambient: [90, 50, 40], shade: 0.6, palette: (-20.0, 1.2, 0.85, [255, 150, 100], 0.35), song: (9, 0) },
+    Theme { name: "Night City", about: "Dark blue night, cool light, Aridia's sky", sky: 2, fog: ([10, 15, 40], 40.0, 260.0), sun: (60.0, 50.0, [120, 140, 200]), ambient: [40, 50, 80], shade: 0.5, palette: (0.0, 0.9, 0.7, [150, 170, 255], 0.4), song: (3, 2) },
+    Theme { name: "Desert Noon", about: "High sun, warm sand, Pokitaru's sky", sky: 11, fog: ([230, 210, 170], 60.0, 320.0), sun: (180.0, 70.0, [255, 240, 210]), ambient: [140, 130, 110], shade: 0.4, palette: (15.0, 1.1, 1.1, [255, 230, 170], 0.3), song: (2, 0) },
+    Theme { name: "Alien Dusk", about: "Pink and violet evening, Veldin's sky", sky: 0, fog: ([120, 60, 110], 30.0, 220.0), sun: (270.0, 15.0, [255, 140, 120]), ambient: [70, 50, 90], shade: 0.5, palette: (-60.0, 1.2, 0.95, [255, 170, 220], 0.3), song: (4, 0) },
+    Theme { name: "Ruins", about: "Grey, dusty and still, Hoven's sky", sky: 12, fog: ([150, 150, 140], 30.0, 200.0), sun: (210.0, 45.0, [220, 210, 190]), ambient: [100, 100, 95], shade: 0.7, palette: (0.0, 0.6, 0.9, [220, 210, 180], 0.3), song: (8, 0) },
+];
+
 /// The World tab: the sky (another planet's, with its light and fog), the fog, the map's song, and the radio.
 fn world_panel(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, images: &mut Assets<Image>) {
     let orange = egui::Color32::from_rgb(0xf0, 0x8a, 0x24);
     let mut w = ed.def.world.clone();
     egui::ScrollArea::vertical().id_salt("world_tab").show(ui, |ui| {
+        egui::CollapsingHeader::new(egui::RichText::new("Themes").strong().size(16.0)).id_salt("world_themes").default_open(true).show(ui, |ui| {
+            ui.label(egui::RichText::new("A whole look in one click: sky, fog, light, colours and song. Change any of it after.").weak().small());
+            let texs: Vec<Option<egui::TextureId>> = THEMES.iter().map(|t| globe_tex(ed, contexts, images, t.sky)).collect();
+            tile_rows(ui, THEMES.len(), 4, |ui, k, size| {
+                let t = &THEMES[k];
+                if picture_tile(ui, texs[k], t.name, t.about, false, size) {
+                    w.sky = Some(t.sky);
+                    w.fog = Some(rc_map::Fog { color: t.fog.0, near: t.fog.1, far: t.fog.2 });
+                    w.light = Some(rc_map::Light { sun_azimuth: t.sun.0, sun_elevation: t.sun.1, sun: t.sun.2, ambient: t.ambient, shade: t.shade });
+                    let (hue, saturation, brightness, tint, tint_amount) = t.palette;
+                    w.palette = Some(rc_map::Palette { hue, saturation, brightness, tint, tint_amount, objects: w.palette.is_some_and(|p| p.objects) });
+                    w.music = Some(t.song);
+                    w.silent = false;
+                    ed.status = format!("Theme {}: change any part of it below", t.name);
+                }
+            });
+            if ui.small_button("Back to the planet's own look").on_hover_text("No sky, fog, light or colour changes (the song stays)").clicked() {
+                w.sky = None;
+                w.fog = None;
+                w.light = None;
+                w.palette = None;
+                w.sky_raise = 0.0;
+                w.sky_turn = 0.0;
+            }
+        });
+        ui.add_space(4.0);
         egui::CollapsingHeader::new(egui::RichText::new("Sky and light").strong().size(16.0)).id_salt("world_sky").default_open(true).show(ui, |ui| {
             ui.label(egui::RichText::new("Another planet's sky, with its background colour and fog.").weak().small());
             let host = ed.def.host_level;
@@ -1309,6 +1435,33 @@ fn world_panel(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, 
             ui.add(egui::Slider::new(&mut w.sky_raise, -45.0..=45.0).suffix("°").text("raise")).on_hover_text("Moves the sky up (or down, below 0): its horizon higher or lower");
             ui.add(egui::Slider::new(&mut w.sky_turn, 0.0..=359.0).suffix("°").text("turn")).on_hover_text("Turns the sky round: where its sun, planets and mountains are");
             if (w.sky_raise != 0.0 || w.sky_turn != 0.0) && ui.small_button("Reset").clicked() { w.sky_raise = 0.0; w.sky_turn = 0.0; }
+            // The sky's own animation: stars and shooting stars (some skies), layers that turn (drifting clouds).
+            let sky_level = w.sky.unwrap_or(host);
+            if rc_game::sky_stars::level_stars(sky_level).is_some() {
+                let mut stars = !w.no_sky_stars;
+                if ui.checkbox(&mut stars, "Stars and shooting stars").on_hover_text("This sky's twinkling stars and the ones that fly across it").changed() { w.no_sky_stars = !stars; }
+            }
+            if !crate::sky_render::level_rotations(sky_level).is_empty() {
+                let mut turning = !w.sky_still;
+                if ui.checkbox(&mut turning, "Clouds drift").on_hover_text("This sky's layers turn slowly (clouds, rings); off: they stand still").changed() { w.sky_still = !turning; }
+            }
+            // The sky's layers (shells): each one shown or hidden, and tinted.
+            let n = sky_layer_count(ed, w.sky.unwrap_or(host));
+            if n > 0 {
+                egui::CollapsingHeader::new("Sky layers").id_salt("world_sky_layers").default_open(false).show(ui, |ui| {
+                    ui.label(egui::RichText::new("The sky is drawn in layers (a dome, clouds, a sun, mountains...): hide or tint each.").weak().small());
+                    if w.sky_layers.len() < n { w.sky_layers.resize(n, rc_map::SkyLayer::default()); }
+                    w.sky_layers.truncate(n);
+                    for (k, l) in w.sky_layers.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            let mut shown = !l.hidden;
+                            if ui.checkbox(&mut shown, format!("Layer {}", k + 1)).changed() { l.hidden = !shown; }
+                            ui.color_edit_button_srgb(&mut l.tint).on_hover_text("Its colour (white: as it is)");
+                        });
+                    }
+                    if w.sky_layers.iter().all(|l| *l == rc_map::SkyLayer::default()) { w.sky_layers.clear(); }
+                });
+            }
             w.sky_raise = w.sky_raise.round();
             w.sky_turn = w.sky_turn.round();
         });
@@ -1329,6 +1482,114 @@ fn world_panel(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, 
                 f.near = f.near.round();
                 f.far = f.far.round();
             }
+        });
+        ui.add_space(4.0);
+        egui::CollapsingHeader::new(egui::RichText::new("Light").strong().size(16.0)).id_salt("world_light").default_open(false).show(ui, |ui| {
+            ui.label(egui::RichText::new("How your islands, paths and pieces are shaded (the game's objects keep their own light).").weak().small());
+            let mut own = w.light.is_some();
+            if ui.checkbox(&mut own, "Own light").changed() { w.light = own.then(rc_map::Light::default); }
+            if let Some(l) = w.light.as_mut() {
+                ui.add(egui::Slider::new(&mut l.sun_azimuth, 0.0..=359.0).suffix("°").text("sun direction")).on_hover_text("Where the sun is, round the compass");
+                ui.add(egui::Slider::new(&mut l.sun_elevation, 0.0..=90.0).suffix("°").text("sun height")).on_hover_text("Low: long, warm side light; high: noon");
+                ui.horizontal(|ui| {
+                    ui.label("Sun");
+                    ui.color_edit_button_srgb(&mut l.sun);
+                    ui.label("Ambient");
+                    ui.color_edit_button_srgb(&mut l.ambient).on_hover_text("The light in the shade");
+                });
+                ui.add(egui::Slider::new(&mut l.shade, 0.0..=1.0).text("shade hollows")).on_hover_text("Darkens dips and the feet of slopes (ambient occlusion)");
+                l.sun_azimuth = l.sun_azimuth.round();
+                l.sun_elevation = l.sun_elevation.round();
+                l.shade = (l.shade * 20.0).round() / 20.0;
+            }
+        });
+        ui.add_space(4.0);
+        egui::CollapsingHeader::new(egui::RichText::new("Colours").strong().size(16.0)).id_salt("world_colours").default_open(false).show(ui, |ui| {
+            ui.label(egui::RichText::new("Shift the whole map's colours: hue, saturation, brightness and a tint.").weak().small());
+            let mut own = w.palette.is_some();
+            if ui.checkbox(&mut own, "Recolour").changed() { w.palette = own.then(rc_map::Palette::default); }
+            if let Some(pal) = w.palette.as_mut() {
+                ui.add(egui::Slider::new(&mut pal.hue, -180.0..=180.0).suffix("°").text("hue"));
+                ui.add(egui::Slider::new(&mut pal.saturation, 0.0..=2.0).text("saturation"));
+                ui.add(egui::Slider::new(&mut pal.brightness, 0.3..=1.7).text("brightness"));
+                ui.horizontal(|ui| {
+                    ui.label("Tint");
+                    ui.color_edit_button_srgb(&mut pal.tint);
+                    ui.add(egui::Slider::new(&mut pal.tint_amount, 0.0..=1.0).text("amount"));
+                });
+                ui.checkbox(&mut pal.objects, "Objects too").on_hover_text("Also the enemies, crates, pickups and Ratchet (their textures): off keeps them easy to tell apart");
+                pal.hue = pal.hue.round();
+                pal.saturation = (pal.saturation * 20.0).round() / 20.0;
+                pal.brightness = (pal.brightness * 20.0).round() / 20.0;
+                pal.tint_amount = (pal.tint_amount * 20.0).round() / 20.0;
+            }
+            // Material groups: one ground texture of the map recoloured wherever it is.
+            let mut used: Vec<AssetId> = ed.def.patches.iter().filter_map(|p| p.texture).chain(ed.def.patches.iter().flat_map(|p| p.layers.iter().map(|l| l.texture))).chain(ed.def.walkways.iter().filter_map(|w| w.texture)).chain(ed.def.floors.iter().filter_map(|f| f.texture)).collect();
+            used.sort_by_key(|a| (a.level, a.number));
+            used.dedup();
+            if !used.is_empty() {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("One ground texture, everywhere it is used").strong());
+                for id in used {
+                    let k = w.recolour.iter().position(|r| r.0 == id);
+                    let tex = ed.entry(&id).map(|e| e.thumb.clone()).and_then(|t| thumb(ed, contexts, images, &t, &mut 4));
+                    ui.horizontal(|ui| {
+                        if let Some(t) = tex { ui.add(egui::Image::new((t, egui::vec2(28.0, 28.0)))); }
+                        let mut on = k.is_some();
+                        if ui.checkbox(&mut on, id.to_string()).changed() {
+                            if on { w.recolour.push((id, rc_map::Palette::default())); } else if let Some(k) = k { w.recolour.remove(k); }
+                        }
+                    });
+                    if let Some(k) = w.recolour.iter().position(|r| r.0 == id) {
+                        let pal = &mut w.recolour[k].1;
+                        ui.indent(("recolour", k), |ui| {
+                            ui.add(egui::Slider::new(&mut pal.hue, -180.0..=180.0).suffix("°").text("hue"));
+                            ui.add(egui::Slider::new(&mut pal.saturation, 0.0..=2.0).text("saturation"));
+                            ui.add(egui::Slider::new(&mut pal.brightness, 0.3..=1.7).text("brightness"));
+                            ui.horizontal(|ui| {
+                                ui.color_edit_button_srgb(&mut pal.tint);
+                                ui.add(egui::Slider::new(&mut pal.tint_amount, 0.0..=1.0).text("tint"));
+                            });
+                        });
+                        pal.hue = pal.hue.round();
+                        pal.saturation = (pal.saturation * 20.0).round() / 20.0;
+                        pal.brightness = (pal.brightness * 20.0).round() / 20.0;
+                        pal.tint_amount = (pal.tint_amount * 20.0).round() / 20.0;
+                    }
+                }
+            }
+        });
+        ui.add_space(4.0);
+        egui::CollapsingHeader::new(egui::RichText::new("Lights").strong().size(16.0)).id_salt("world_lights").default_open(false).show(ui, |ui| {
+            ui.label(egui::RichText::new("Point lights: they light your ground and the objects near them (a lamp, lava glow, a crystal).").weak().small());
+            if ui.button("+ Add a light where the camera looks").clicked() { ed.light_add = true; }
+            let mut drop = None;
+            for (k, l) in w.lights.iter_mut().enumerate() {
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(ed.light_sel == Some(k), egui::RichText::new(format!("Light {}", k + 1)).strong()).on_hover_text("Pick it: it shows in the world").clicked() {
+                            ed.light_sel = if ed.light_sel == Some(k) { None } else { Some(k) };
+                        }
+                        ui.color_edit_button_srgb(&mut l.colour);
+                        if ui.small_button("x").on_hover_text("Delete this light").clicked() { drop = Some(k); }
+                    });
+                    ui.horizontal(|ui| {
+                        for (a, v) in l.position.iter_mut().enumerate() {
+                            ui.add(egui::DragValue::new(v).speed(0.1).range(0.0..=1023.0)).on_hover_text(["x", "y", "height"][a]);
+                        }
+                    });
+                    ui.add(egui::Slider::new(&mut l.radius, 2.0..=60.0).text("reach"));
+                    ui.add(egui::Slider::new(&mut l.intensity, 0.1..=3.0).text("strength"));
+                    l.radius = l.radius.round();
+                    l.intensity = (l.intensity * 10.0).round() / 10.0;
+                    for v in l.position.iter_mut() { *v = (*v * 4.0).round() / 4.0; }
+                });
+            }
+            if let Some(k) = drop {
+                w.lights.remove(k);
+                ed.light_sel = None;
+            }
+            if w.lights.len() > 4 { ui.label(egui::RichText::new("Only the first 4 light the objects (the game has a few light slots); all of them light the ground.").weak().small()); }
         });
         ui.add_space(4.0);
         egui::CollapsingHeader::new(egui::RichText::new("Song").strong().size(16.0)).id_salt("world_song").default_open(true).show(ui, |ui| {
@@ -1381,6 +1642,9 @@ fn world_panel(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, 
         if !ed.coalescing { ed.checkpoint(); }
         ed.coalescing = true;
         ed.def.world = w;
+        // Live: the map's light, colours, lights and fog redrawn now; the sky and the objects' colours come with the
+        // reload when the slider is let go.
+        crate::map_load::set(ed.def.clone());
         ed.changed();
     }
 }
@@ -1388,6 +1652,45 @@ fn world_panel(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, 
 /// A view button (crate::editor panels): the camera looks at the selected object (else the ground it faces, else 20
 /// ahead) from that side, at a distance that fits the object.
 fn snap_view(mut ed: ResMut<Editor>, mut cams: Query<(&mut Transform, &mut FlyCam)>) {
+    // Set thumbnail: where the camera stands is kept in the map (a save takes the picture again from there).
+    if std::mem::take(&mut ed.thumb_record) {
+        if let Ok((t, fly)) = cams.single() {
+            let p = t.translation;
+            let view = Some([p.x, p.y, p.z, fly.yaw, fly.pitch].map(|v| (v * 1000.0).round() / 1000.0));
+            if ed.def.thumb_view != view {
+                ed.def.thumb_view = view;
+                ed.saved = false;
+            }
+        }
+    }
+    // A retake: the camera to the picture's spot, the shot, then the camera back where it was.
+    if std::mem::take(&mut ed.thumb_retake) {
+        if let (Some(v), Ok((mut t, mut fly))) = (ed.def.thumb_view, cams.single_mut()) {
+            ed.thumb_restore = Some((*t, fly.yaw, fly.pitch));
+            t.translation = Vec3::new(v[0], v[1], v[2]);
+            t.rotation = Quat::from_euler(EulerRot::YXZ, v[3], v[4], 0.0);
+            (fly.yaw, fly.pitch) = (v[3], v[4]);
+            ed.thumb_shot = Some((menu::thumb_path(&ed.path), 3));
+        }
+    } else if ed.thumb_shot.is_none() {
+        if let (Some((rt, yaw, pitch)), Ok((mut t, mut fly))) = (ed.thumb_restore.take(), cams.single_mut()) {
+            *t = rt;
+            (fly.yaw, fly.pitch) = (yaw, pitch);
+            ed.status = "Saved; the map's picture taken again from its spot".into();
+        }
+    }
+    // A point light asked for in the World tab: on the ground the camera looks at, 2 units up (else 12 ahead).
+    if std::mem::take(&mut ed.light_add) {
+        if let Ok((t, _)) = cams.single() {
+            let (eye, fwd) = (to_game(t.translation), to_game(t.forward().as_vec3()));
+            let at = terrain_hit(&ed.def, (eye, fwd)).map(|h| [h.1[0], h.1[1], h.1[2] + 2.0]).unwrap_or([eye[0] + fwd[0] * 12.0, eye[1] + fwd[1] * 12.0, eye[2] + fwd[2] * 12.0]);
+            ed.checkpoint();
+            ed.def.world.lights.push(rc_map::PointLight { position: at.map(|v| (v * 4.0).round() / 4.0), colour: [255, 200, 130], radius: 14.0, intensity: 1.2 });
+            ed.light_sel = Some(ed.def.world.lights.len() - 1);
+            ed.status = "Light placed where the camera looks: colour, reach and place in the World tab".into();
+            ed.changed();
+        }
+    }
     let Some(view) = ed.view_snap.take() else { return };
     let Ok((mut t, mut fly)) = cams.single_mut() else { return };
     let eye = to_game(t.translation);
@@ -1589,6 +1892,8 @@ impl Editor {
             }
             Err(e) => format!("Not saved: {e}"),
         };
+        // The map's picture taken again from where it was set (it shows the edits since).
+        if self.saved && self.def.thumb_view.is_some() && !self.settings.no_thumb_on_save && self.thumb_shot.is_none() { self.thumb_retake = true; }
     }
     /// An enemy's wake and attack ranges ([`SIGHT`]: a template pvar or the class's constant; 0 = none): the circles of
     /// where it notices Ratchet and where it attacks. None for classes not mapped.
@@ -2133,7 +2438,7 @@ fn viewport(
                 459 => vec![p, [p[0] + 6.0 * yaw.cos(), p[1] + 6.0 * yaw.sin(), p[2]]],
                 _ => Vec::new(),
             };
-            ed.selected = Some(ed.add_object(Object { asset, position: p, yaw, template: None, group: None, path, time: None, solid: None, name: None, hidden: false }));
+            ed.selected = Some(ed.add_object(Object { asset, position: p, yaw, template: None, group: None, path, time: None, solid: None, name: None, hidden: false, tint: None }));
             ed.status = format!("Placed {}", ed.name_of(&asset));
             ed.changed();
         } else if let Some(g) = ed.selected.and_then(|i| grab_gizmo(&ed, i, ray, window, &frame, cam)) {
@@ -3038,6 +3343,15 @@ fn map_warnings(def: &MapDef) -> Vec<String> {
     if ammo > 0 && !def.loadout.iter().any(|i| AMMO_WEAPONS.contains(i)) {
         out.push(format!("{ammo} ammo crates or pickups, but no weapon that uses ammo in the loadout (Map panel): they give nothing."));
     }
+    // Readability (design doc "Guard rails"): the objects' colours shifted hard, or a fog thick enough to hide them.
+    if let Some(p) = def.world.palette.filter(|p| p.objects) {
+        if p.saturation < 0.6 || p.brightness < 0.65 || p.tint_amount > 0.5 || p.hue.abs() > 90.0 {
+            out.push("Colours > Objects too shifts the enemies' and pickups' colours a lot: they may be hard to spot. Try it with Play, or leave Objects too off.".into());
+        }
+    }
+    if let Some(f) = def.world.fog.filter(|f| f.far < 70.0) {
+        out.push(format!("The fog is full at {:.0} units: enemies and ledges further away disappear in it.", f.far));
+    }
     let vanish = def.objects.iter().filter(|o| crate::map_load::MAY_VANISH.contains(&o.asset.number)).count();
     if vanish > 0 { out.push(format!("{vanish} objects are marked \"may vanish on maps\": try them with Play before building around them.")); }
     // The logic: names used twice, rules naming what is not there, hidden objects nothing shows.
@@ -3688,6 +4002,17 @@ fn markers(
             }
         }
     }
+    // The point lights (World tab): a ball in their colour and their reach on the ground, the picked one brighter.
+    if ed.tool == Tool::World {
+        for (k, l) in ed.def.world.lights.iter().enumerate() {
+            let c = Color::srgb_u8(l.colour[0], l.colour[1], l.colour[2]);
+            let on = ed.light_sel == Some(k);
+            handles.sphere(Isometry3d::from_translation(game_to_bevy(l.position)), if on { 0.5 } else { 0.3 }, if on { Color::WHITE } else { c });
+            let g = ground(&ed.def, l.position[0], l.position[1], l.position[2]);
+            gizmos.circle(Isometry3d::new(game_to_bevy([l.position[0], l.position[1], g + 0.1]), Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)), l.radius, c.with_alpha(if on { 0.9 } else { 0.4 }));
+            gizmos.line(game_to_bevy(l.position), game_to_bevy([l.position[0], l.position[1], g]), c.with_alpha(0.5));
+        }
+    }
     // The zone a click would place, at the pointer (pulsing), then the zones: their boxes in their kind's colour (faint
     // outside the Logic tab), a camera zone's eye.
     if let Some(z) = ed.zone_ghost.as_ref().filter(|_| ed.tool == Tool::Logic && ed.zone_new.is_some()) {
@@ -3914,6 +4239,14 @@ fn panels(
                 ui.add_enabled_ui(can_edit, |ui| {
                     if ui.button("New").on_hover_text("A new map in your maps folder (Documents\\RAC Maker)").clicked() { ed.new_map(); }
                     if ui.button("Save").on_hover_text("Ctrl+S (the old version is kept as a backup)").clicked() { ed.save(); }
+                    let mut thumb = !ed.settings.no_thumb_on_save;
+                    if ui.checkbox(&mut thumb, egui::RichText::new("+ picture").small())
+                        .on_hover_text(if ed.def.thumb_view.is_some() { "Saving also takes the map's picture again, from where you pressed Set thumbnail (with your new edits in it)" } else { "Saving also takes the map's picture again: press Set thumbnail once to choose where from" })
+                        .changed()
+                    {
+                        ed.settings.no_thumb_on_save = !thumb;
+                        ed.settings.store();
+                    }
                     if ui.add_enabled(!ed.undo.is_empty(), egui::Button::new("Undo")).on_hover_text("Ctrl+Z").clicked() { ed.undo(); }
                     if ui.add_enabled(!ed.redo.is_empty(), egui::Button::new("Redo")).on_hover_text("Ctrl+Y").clicked() { ed.redo(); }
                 });
@@ -3929,6 +4262,7 @@ fn panels(
             }
             if ui.button("Set thumbnail").on_hover_text("The main menu's picture of this map: what the camera sees now (fly it to a nice view first)").clicked() {
                 ed.thumb_shot = Some((menu::thumb_path(&ed.path), 2));
+                ed.thumb_record = true;
             }
             if ui.selectable_label(ed.show_collision, "Collision (F6)").on_hover_text("Shows what Ratchet stands on and bumps into near the camera, also while playing: green ground, blue slippery, orange hot, red deadly, purple magnetic, grey cliffs, yellow edges").clicked() {
                 ed.show_collision = !ed.show_collision;
@@ -4380,6 +4714,10 @@ fn walk_settings(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts
     });
     ui.label(egui::RichText::new("Edge (both sides)").strong());
     edge_picker(ui, ed, contexts, images, &mut w.edge, "walk_edge");
+    if k.is_some() {
+        let tex = w.texture;
+        colour_section(ui, ed, &mut w.tint, tex, "path");
+    }
     w.width = (w.width * 64.0).round() / 64.0;
     w.depth = (w.depth * 64.0).round() / 64.0;
     if w != before {
@@ -4820,6 +5158,9 @@ fn patch_inspector(ui: &mut egui::Ui, ed: &mut Editor, k: usize, contexts: &mut 
     ui.label(egui::RichText::new("Texture").strong());
     if ui.selectable_label(p.texture.is_none(), "Plain").clicked() { p.texture = None; }
     if let Some(id) = texture_grid(ui, ed, contexts, images, p.texture, "patch_textures") { p.texture = Some(id); }
+    ui.separator();
+    let tex = p.texture;
+    colour_section(ui, ed, &mut p.tint, tex, "island");
     ui.add_space(8.0);
     if ui.button("Delete patch").clicked() {
         ed.checkpoint();
@@ -5048,6 +5389,14 @@ fn inspector(ui: &mut egui::Ui, ed: &mut Editor, contexts: &mut EguiContexts, im
                 edited = true;
             }
             ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            let mut tinted = ob.tint.is_some();
+            if ui.checkbox(&mut tinted, "Tint").on_hover_text("Colours this object (its own light colour): a golden statue, a red crate").changed() {
+                ob.tint = tinted.then_some([255, 200, 90]);
+                edited = true;
+            }
+            if let Some(c) = ob.tint.as_mut() { edited |= ui.color_edit_button_srgb(c).changed(); }
         });
         if ui.checkbox(&mut ob.hidden, "Hidden until a rule shows it").on_hover_text("Not there, not solid, not moving until a rule in the Logic tab shows it: an ambush, a bridge that appears").changed() {
             if ob.hidden && ob.name.is_none() { ob.name = Some(format!("{} {}", ed.name_of(&id), i + 1)); }

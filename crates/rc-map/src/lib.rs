@@ -199,6 +199,8 @@ pub struct Object {
     pub name: Option<String>,
     /// Hidden until a rule shows it.
     pub hidden: bool,
+    /// Its colour tinted (the object's own light colour: its record's ambient, scaled by this).
+    pub tint: Option<[u8; 3]>,
 }
 
 /// One map file.
@@ -229,6 +231,9 @@ pub struct MapDef {
     pub rules: Vec<logic::Rule>,
     /// The sky, light, fog and song (`"world"`).
     pub world: World,
+    /// Where the editor's camera stood for the map's picture (`"thumb_view"`: position x, y, z in the renderer's axes,
+    /// yaw, pitch): a save can take the picture again from there.
+    pub thumb_view: Option<[f32; 5]>,
     pub rails: Vec<Rail>,
     pub objects: Vec<Object>,
 }
@@ -247,6 +252,103 @@ pub struct World {
     /// The sky moved: raised (degrees, + up) and turned about the up axis (degrees).
     pub sky_raise: f32,
     pub sky_turn: f32,
+    /// The light the map's own terrain is shaded with; None: the default (a high sun from the −x, −y side).
+    pub light: Option<Light>,
+    /// The map's colours shifted; None: as the game's textures are.
+    pub palette: Option<Palette>,
+    /// Point lights: they light the map's terrain and the objects near them.
+    pub lights: Vec<PointLight>,
+    /// The sky's animation: its stars and shooting stars off (`"sky_stars": false`), its turning layers (clouds) still.
+    pub no_sky_stars: bool,
+    pub sky_still: bool,
+    /// Per sky layer (shell, in order): hidden, and its colour (white: as it is).
+    pub sky_layers: Vec<SkyLayer>,
+    /// Material groups: one terrain texture recoloured wherever it is used.
+    pub recolour: Vec<(AssetId, Palette)>,
+}
+
+/// A point light of the map.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointLight {
+    pub position: [f32; 3],
+    pub colour: [u8; 3],
+    /// How far it reaches (units).
+    pub radius: f32,
+    /// 1 = its colour at full strength at its centre.
+    pub intensity: f32,
+}
+
+/// A sky layer's look.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkyLayer {
+    pub hidden: bool,
+    pub tint: [u8; 3],
+}
+
+impl Default for SkyLayer {
+    fn default() -> Self { SkyLayer { hidden: false, tint: [255, 255, 255] } }
+}
+
+/// The light rig the map's terrain is baked with (design doc: "Lighting"): one sun, an ambient, soft shading in hollows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Light {
+    /// Where the sun is: compass degrees (0 = +x, counter-clockwise) and degrees above the horizon.
+    pub sun_azimuth: f32,
+    pub sun_elevation: f32,
+    pub sun: [u8; 3],
+    pub ambient: [u8; 3],
+    /// How much hollows and the feet of slopes darken (ambient occlusion, 0..1).
+    pub shade: f32,
+}
+
+impl Default for Light {
+    /// The terrain's light before the rig: the same sun, ambient 0.5, sun 0.55.
+    fn default() -> Self { Light { sun_azimuth: 233.0, sun_elevation: 46.0, sun: [140, 140, 140], ambient: [128, 128, 128], shade: 0.0 } }
+}
+
+/// The map palette (design doc: "Colour, hue and theming", layer 1): a hue turn, saturation and brightness, and a
+/// tint mixed in, over the map's terrain and pieces (and, with `objects`, the objects' textures too).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Palette {
+    /// Degrees round the colour wheel.
+    pub hue: f32,
+    /// 1 = as it is; 0 = grey.
+    pub saturation: f32,
+    /// 1 = as it is.
+    pub brightness: f32,
+    pub tint: [u8; 3],
+    /// How much of `tint` is mixed in (0..1).
+    pub tint_amount: f32,
+    pub objects: bool,
+}
+
+impl Default for Palette {
+    fn default() -> Self { Palette { hue: 0.0, saturation: 1.0, brightness: 1.0, tint: [255, 255, 255], tint_amount: 0.0, objects: false } }
+}
+
+impl Palette {
+    /// A colour through the palette: hue turned, saturation and brightness scaled, the tint mixed in.
+    pub fn apply(&self, c: [u8; 3]) -> [u8; 3] {
+        let [r, g, b] = c.map(|v| v as f32 / 255.0);
+        // To HSV.
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let d = max - min;
+        let mut h = if d < 1e-6 { 0.0 } else if max == r { ((g - b) / d).rem_euclid(6.0) } else if max == g { (b - r) / d + 2.0 } else { (r - g) / d + 4.0 } * 60.0;
+        let s = if max < 1e-6 { 0.0 } else { d / max };
+        h = (h + self.hue).rem_euclid(360.0);
+        let s = (s * self.saturation).clamp(0.0, 1.0);
+        let v = (max * self.brightness).clamp(0.0, 1.0);
+        // Back to RGB.
+        let cc = v * s;
+        let x = cc * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+        let (r1, g1, b1) = match (h / 60.0) as u32 { 0 => (cc, x, 0.0), 1 => (x, cc, 0.0), 2 => (0.0, cc, x), 3 => (0.0, x, cc), 4 => (x, 0.0, cc), _ => (cc, 0.0, x) };
+        let m = v - cc;
+        let t = self.tint.map(|v| v as f32 / 255.0);
+        let k = self.tint_amount.clamp(0.0, 1.0);
+        // The tint multiplies (a coloured light) as much as `tint_amount` says.
+        [r1 + m, g1 + m, b1 + m].iter().zip(t).map(|(c, t)| ((c * (1.0 - k) + c * t * k) * 255.0).round().clamp(0.0, 255.0) as u8).collect::<Vec<_>>().try_into().unwrap()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -397,7 +499,7 @@ impl MapDef {
                             tile: r.get("tile").and_then(Value::as_f32).unwrap_or(8.0),
                         }),
                     };
-                    let mut p = terrain::Patch { origin, spacing, size: [size[0] as u16, size[1] as u16], heights, texture, tile, depth, layers, mask, edge, roof, surface, shade, scatter };
+                    let mut p = terrain::Patch { origin, spacing, size: [size[0] as u16, size[1] as u16], heights, texture, tile, depth, layers, mask, edge, roof, surface, shade, scatter, tint: f.get("tint").and_then(Value::as_f32s::<3>).map(|c| c.map(|x| x.clamp(0.0, 255.0) as u8)) };
                     p.quantize_mask();
                     p.quantize();
                     p.check().map_err(|e| MapError(format!("{what}: {e}")))?;
@@ -416,6 +518,7 @@ impl MapDef {
                         surface: parse_surface(f, &what)?,
                         edge: f.get("edge").map(|e| parse_edge(e, &what)).transpose()?,
                         cut: f.get("cut").and_then(Value::as_bool).unwrap_or(false),
+                        tint: f.get("tint").and_then(Value::as_f32s::<3>).map(|c| c.map(|x| x.clamp(0.0, 255.0) as u8)),
                     };
                     w.check().map_err(|e| MapError(format!("{what}: {e}")))?;
                     walkways.push(w);
@@ -451,7 +554,8 @@ impl MapDef {
             let solid = o.get("solid").and_then(Value::as_bool);
             let name = o.get("name").and_then(Value::as_str).map(str::to_string).filter(|n| !n.trim().is_empty());
             let hidden = o.get("hidden").and_then(Value::as_bool).unwrap_or(false);
-            objects.push(Object { asset, position: f3(o.get("position"), &format!("{what}.position"))?, yaw: o.get("yaw").and_then(Value::as_f32).unwrap_or(0.0), template, group, path, time, solid, name, hidden });
+            let tint = o.get("tint").and_then(Value::as_f32s::<3>).map(|c| c.map(|x| x.clamp(0.0, 255.0) as u8));
+            objects.push(Object { asset, position: f3(o.get("position"), &format!("{what}.position"))?, yaw: o.get("yaw").and_then(Value::as_f32).unwrap_or(0.0), template, group, path, time, solid, name, hidden, tint });
         }
         let mut zones = Vec::new();
         for (i, z) in v.get("zones").and_then(Value::as_arr).unwrap_or(&[]).iter().enumerate() {
@@ -520,9 +624,58 @@ impl MapDef {
             }
             world.silent = w.get("silent").and_then(Value::as_bool).unwrap_or(false);
             world.sky_raise = w.get("sky_raise").and_then(Value::as_f32).unwrap_or(0.0).clamp(-45.0, 45.0);
+            let rgb = |v: Option<&Value>, d: [u8; 3]| v.and_then(Value::as_f32s::<3>).map_or(d, |c| c.map(|x| x.clamp(0.0, 255.0) as u8));
+            if let Some(l) = w.get("light") {
+                let d = Light::default();
+                let sun = l.get("sun").and_then(Value::as_f32s::<2>).unwrap_or([d.sun_azimuth, d.sun_elevation]);
+                world.light = Some(Light {
+                    sun_azimuth: sun[0].rem_euclid(360.0),
+                    sun_elevation: sun[1].clamp(-10.0, 90.0),
+                    sun: rgb(l.get("sun_colour"), d.sun),
+                    ambient: rgb(l.get("ambient"), d.ambient),
+                    shade: l.get("shade").and_then(Value::as_f32).unwrap_or(0.0).clamp(0.0, 1.0),
+                });
+            }
+            for (k, l) in w.get("lights").and_then(Value::as_arr).unwrap_or(&[]).iter().enumerate() {
+                world.lights.push(PointLight {
+                    position: f3(l.get("position"), &format!("world.lights[{k}].position"))?,
+                    colour: rgb(l.get("colour"), [255, 220, 160]),
+                    radius: l.get("radius").and_then(Value::as_f32).unwrap_or(12.0).clamp(1.0, 200.0),
+                    intensity: l.get("intensity").and_then(Value::as_f32).unwrap_or(1.0).clamp(0.0, 4.0),
+                });
+            }
+            for l in w.get("sky_layers").and_then(Value::as_arr).unwrap_or(&[]) {
+                world.sky_layers.push(SkyLayer { hidden: l.get("hidden").and_then(Value::as_bool).unwrap_or(false), tint: rgb(l.get("tint"), [255, 255, 255]) });
+            }
+            let palette_of = |p: &Value| Palette {
+                hue: p.get("hue").and_then(Value::as_f32).unwrap_or(0.0).clamp(-180.0, 180.0),
+                saturation: p.get("saturation").and_then(Value::as_f32).unwrap_or(1.0).clamp(0.0, 3.0),
+                brightness: p.get("brightness").and_then(Value::as_f32).unwrap_or(1.0).clamp(0.0, 3.0),
+                tint: rgb(p.get("tint"), [255, 255, 255]),
+                tint_amount: p.get("tint_amount").and_then(Value::as_f32).unwrap_or(0.0).clamp(0.0, 1.0),
+                objects: false,
+            };
+            for (k, r) in w.get("recolour").and_then(Value::as_arr).unwrap_or(&[]).iter().enumerate() {
+                let id = r.get("texture").and_then(Value::as_str).ok_or_else(|| MapError(format!("world.recolour[{k}].texture: missing")))?;
+                world.recolour.push((AssetId::parse(id)?, palette_of(r)));
+            }
+            if let Some(p) = w.get("palette") {
+                let d = Palette::default();
+                world.palette = Some(Palette {
+                    hue: p.get("hue").and_then(Value::as_f32).unwrap_or(0.0).clamp(-180.0, 180.0),
+                    saturation: p.get("saturation").and_then(Value::as_f32).unwrap_or(1.0).clamp(0.0, 3.0),
+                    brightness: p.get("brightness").and_then(Value::as_f32).unwrap_or(1.0).clamp(0.0, 3.0),
+                    tint: rgb(p.get("tint"), d.tint),
+                    tint_amount: p.get("tint_amount").and_then(Value::as_f32).unwrap_or(0.0).clamp(0.0, 1.0),
+                    objects: p.get("objects").and_then(Value::as_bool).unwrap_or(false),
+                });
+            }
             world.sky_turn = w.get("sky_turn").and_then(Value::as_f32).unwrap_or(0.0).rem_euclid(360.0);
+            world.no_sky_stars = w.get("sky_stars").and_then(Value::as_bool) == Some(false);
+            world.sky_still = w.get("sky_still").and_then(Value::as_bool).unwrap_or(false);
         }
-        Ok(MapDef { name, host_level, start, ship, death_height, loadout, abilities, reset_on_death, floors, patches, walkways, zones, rules, world, rails, objects })
+        let thumb_view = v.get("thumb_view").and_then(Value::as_f32s::<5>).filter(|v| v.iter().all(|x| x.is_finite()));
+        Ok(MapDef { name, host_level, start, ship, thumb_view, death_height, loadout, abilities, reset_on_death, floors, patches, walkways, zones, rules, world, rails, objects })
     }
 
     /// A new map: an 80 × 80 ground patch at height 60 on `host_level`, Ratchet in its middle, the rails on, nothing placed.
@@ -547,6 +700,7 @@ impl MapDef {
             zones: Vec::new(),
             rules: Vec::new(),
             world: World::default(),
+            thumb_view: None,
             rails: Vec::new(),
             objects: Vec::new(),
         }
@@ -565,6 +719,8 @@ impl MapDef {
 ", q(&self.name), self.host_level);
         o += &format!("  \"start\": {{ \"position\": {}, \"yaw\": {} }},
 ", v3(self.start.position), n(self.start.yaw));
+        if let Some(t) = &self.thumb_view { o += &format!("  \"thumb_view\": [{}],
+", t.iter().map(|v| n(*v)).collect::<Vec<_>>().join(", ")); }
         if let Some(sh) = &self.ship { o += &format!("  \"ship\": {{ \"position\": {}, \"yaw\": {} }},\n", v3(sh.position), n(sh.yaw)); }
         if let Some(d) = self.death_height { o += &format!("  \"death_height\": {},
 ", n(d)); }
@@ -616,7 +772,9 @@ impl MapDef {
                 let tex = r.texture.map(|t| format!(", \"texture\": {}", q(&t.to_string()))).unwrap_or_default();
                 format!(",\n      \"roof\": {{ \"height\": {}{tex}, \"tile\": {} }}", n(r.height), n(r.tile))
             });
-            let layers = layers + &mask + &edge + &roof + &surface + &shade + &scatter;
+            let tint = p.tint.map_or(String::new(), |c| format!(",
+      \"tint\": [{}, {}, {}]", c[0], c[1], c[2]));
+            let layers = layers + &mask + &edge + &roof + &surface + &shade + &scatter + &tint;
             format!(
                 "    {{ \"kind\": \"patch\", \"origin\": {}, \"spacing\": {}, \"size\": [{}, {}]{tex}, \"tile\": {}, \"depth\": {},
       \"heights\": [
@@ -629,7 +787,7 @@ impl MapDef {
         floors.extend(self.walkways.iter().map(|w| {
             let tex = w.texture.map(|t| format!(", \"texture\": {}", q(&t.to_string()))).unwrap_or_default();
             let surface = if w.surface == floor::GROUND { String::new() } else { format!(", \"surface\": {}", w.surface) };
-            let edge = w.edge.as_ref().map_or(String::new(), edge_json) + if w.cut { ", \"cut\": true" } else { "" };
+            let edge = w.edge.as_ref().map_or(String::new(), edge_json) + if w.cut { ", \"cut\": true" } else { "" } + &w.tint.map_or(String::new(), |c| format!(", \"tint\": [{}, {}, {}]", c[0], c[1], c[2]));
             format!("    {{ \"kind\": \"walkway\", \"points\": [{}], \"width\": {}, \"depth\": {}{tex}, \"tile\": {}{surface}{edge} }}",
                 w.points.iter().map(|&p| v3(p)).collect::<Vec<_>>().join(", "), n(w.width), n(w.depth), n(w.tile))
         }));
@@ -651,7 +809,8 @@ impl MapDef {
                 + &ob.time.map(|t| format!(", \"time\": {}", n(t))).unwrap_or_default()
                 + &ob.solid.map(|s| format!(", \"solid\": {s}")).unwrap_or_default()
                 + &ob.name.as_ref().map(|nm| format!(", \"name\": {}", q(nm))).unwrap_or_default()
-                + if ob.hidden { ", \"hidden\": true" } else { "" };
+                + if ob.hidden { ", \"hidden\": true" } else { "" }
+                + &ob.tint.map(|c| format!(", \"tint\": [{}, {}, {}]", c[0], c[1], c[2])).unwrap_or_default();
             format!("    {{ \"asset\": {}, \"position\": {}, \"yaw\": {}{t} }}", q(&ob.asset.to_string()), v3(ob.position), n(ob.yaw))
         }).collect();
         let zones: Vec<String> = self.zones.iter().map(|z| {
@@ -683,6 +842,27 @@ impl MapDef {
             if w.silent { f.push("\"silent\": true".into()); }
             if w.sky_raise != 0.0 { f.push(format!("\"sky_raise\": {}", n(w.sky_raise))); }
             if w.sky_turn != 0.0 { f.push(format!("\"sky_turn\": {}", n(w.sky_turn))); }
+            if w.no_sky_stars { f.push("\"sky_stars\": false".into()); }
+            if w.sky_still { f.push("\"sky_still\": true".into()); }
+            let rgb = |c: [u8; 3]| format!("[{}, {}, {}]", c[0], c[1], c[2]);
+            if let Some(l) = &w.light {
+                f.push(format!("\"light\": {{ \"sun\": [{}, {}], \"sun_colour\": {}, \"ambient\": {}, \"shade\": {} }}", n(l.sun_azimuth), n(l.sun_elevation), rgb(l.sun), rgb(l.ambient), n(l.shade)));
+            }
+            if !w.lights.is_empty() {
+                let ls: Vec<String> = w.lights.iter().map(|l| format!("{{ \"position\": {}, \"colour\": {}, \"radius\": {}, \"intensity\": {} }}", v3(l.position), rgb(l.colour), n(l.radius), n(l.intensity))).collect();
+                f.push(format!("\"lights\": [{}]", ls.join(", ")));
+            }
+            if w.sky_layers.iter().any(|l| *l != SkyLayer::default()) {
+                let ls: Vec<String> = w.sky_layers.iter().map(|l| format!("{{ \"hidden\": {}, \"tint\": {} }}", l.hidden, rgb(l.tint))).collect();
+                f.push(format!("\"sky_layers\": [{}]", ls.join(", ")));
+            }
+            if !w.recolour.is_empty() {
+                let ls: Vec<String> = w.recolour.iter().map(|(id, p)| format!("{{ \"texture\": {}, \"hue\": {}, \"saturation\": {}, \"brightness\": {}, \"tint\": {}, \"tint_amount\": {} }}", q(&id.to_string()), n(p.hue), n(p.saturation), n(p.brightness), rgb(p.tint), n(p.tint_amount))).collect();
+                f.push(format!("\"recolour\": [{}]", ls.join(", ")));
+            }
+            if let Some(p) = &w.palette {
+                f.push(format!("\"palette\": {{ \"hue\": {}, \"saturation\": {}, \"brightness\": {}, \"tint\": {}, \"tint_amount\": {}, \"objects\": {} }}", n(p.hue), n(p.saturation), n(p.brightness), rgb(p.tint), n(p.tint_amount), p.objects));
+            }
             if let Some(g) = &w.fog { f.push(format!("\"fog\": {{ \"color\": [{}, {}, {}], \"near\": {}, \"far\": {} }}", g.color[0], g.color[1], g.color[2], n(g.near), n(g.far))); }
             o += &format!("  \"world\": {{ {} }},\n", f.join(", "));
         }
@@ -702,7 +882,8 @@ impl MapDef {
         let mut out: Vec<(usize, u32)> = sky_settings.map_or_else(Vec::new, |w| (0..10).map(|k| (k * 4, w[k])).collect());
         if let Some(f) = &self.world.fog {
             out.retain(|(o, _)| !(0x0c..=0x1c).contains(o));
-            out.extend([(0x0c, f.color[0] as u32), (0x10, f.color[1] as u32), (0x14, f.color[2] as u32), (0x18, f.near.to_bits()), (0x1c, f.far.max(f.near + 1.0).to_bits())]);
+            // The distances are stored in 1/1024 units (the GS depth's fixed point).
+            out.extend([(0x0c, f.color[0] as u32), (0x10, f.color[1] as u32), (0x14, f.color[2] as u32), (0x18, (f.near * 1024.0).to_bits()), (0x1c, (f.far.max(f.near + 1.0) * 1024.0).to_bits())]);
         }
         out
     }
@@ -783,6 +964,18 @@ mod tests {
     }
 
     #[test]
+    fn the_default_palette_keeps_colours_and_a_hue_turn_moves_them() {
+        let d = Palette::default();
+        for c in [[0, 0, 0], [255, 255, 255], [200, 30, 40], [12, 180, 90], [77, 77, 200]] {
+            let o = d.apply(c);
+            assert!(c.iter().zip(o).all(|(a, b)| (*a as i32 - b as i32).abs() <= 1), "{c:?} -> {o:?}");
+        }
+        let red_to_green = Palette { hue: 120.0, ..d }.apply([255, 0, 0]);
+        assert!(red_to_green[1] > 250 && red_to_green[0] < 5 && red_to_green[2] < 5, "{red_to_green:?}");
+        assert_eq!(Palette { saturation: 0.0, ..d }.apply([255, 0, 0]), [255, 255, 255]);
+    }
+
+    #[test]
     fn writes_and_reads_back() {
         let m = MapDef::parse(MAP).unwrap();
         assert_eq!(MapDef::parse(&m.to_json()).unwrap(), m);
@@ -804,7 +997,15 @@ mod tests {
         }];
         assert_eq!(MapDef::parse(&l.to_json()).unwrap(), l);
         // The world, the ship, a cut path.
-        l.world = World { sky: Some(3), music: Some((5, 2)), silent: false, fog: Some(Fog { color: [10, 20, 30], near: 40.0, far: 200.0 }), sky_raise: -8.0, sky_turn: 90.0 };
+        l.world = World { sky: Some(3), music: Some((5, 2)), silent: false, fog: Some(Fog { color: [10, 20, 30], near: 40.0, far: 200.0 }), sky_raise: -8.0, sky_turn: 90.0,
+            light: Some(Light { sun_azimuth: 120.0, sun_elevation: 30.0, sun: [255, 200, 150], ambient: [60, 70, 90], shade: 0.5 }),
+            palette: Some(Palette { hue: -40.0, saturation: 1.25, brightness: 0.9, tint: [200, 255, 200], tint_amount: 0.3, objects: true }),
+            lights: vec![PointLight { position: [150.0, 150.0, 63.0], colour: [255, 120, 40], radius: 14.0, intensity: 1.5 }],
+            sky_layers: vec![SkyLayer::default(), SkyLayer { hidden: true, tint: [255, 100, 100] }],
+            recolour: vec![(AssetId::parse("rac1/L01/tfrag-tex/8").unwrap(), Palette { hue: 30.0, ..Palette::default() })],
+            no_sky_stars: true, sky_still: true };
+        l.patches.iter_mut().for_each(|p| p.tint = Some([200, 100, 50]));
+        l.objects[0].tint = Some([255, 120, 120]);
         l.ship = Some(Start { position: [150.0, 140.0, 60.0], yaw: 1.5 });
         assert_eq!(MapDef::parse(&l.to_json()).unwrap(), l);
     }

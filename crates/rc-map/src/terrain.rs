@@ -55,6 +55,8 @@ pub struct Patch {
     pub shade: Vec<u32>,
     /// Plants and details strewn over its land (drawn only, not solid).
     pub scatter: Vec<Scatter>,
+    /// Its colour tinted (multiplies its light: this island only).
+    pub tint: Option<[u8; 3]>,
 }
 
 /// One scattered piece: a shrub, tie or moby model at `at` (x, y; it stands on the land there, wherever the land is
@@ -202,7 +204,7 @@ impl Patch {
     /// A flat patch of `size` cells at `origin`.
     pub fn flat(origin: [f32; 3], spacing: f32, size: [u16; 2]) -> Patch {
         let n = (size[0] as usize + 1) * (size[1] as usize + 1);
-        Patch { origin, spacing, size, heights: vec![0.0; n], texture: None, tile: 8.0, depth: 0.0, layers: Vec::new(), mask: Vec::new(), edge: None, roof: None, surface: crate::floor::GROUND, shade: Vec::new(), scatter: Vec::new() }
+        Patch { origin, spacing, size, heights: vec![0.0; n], texture: None, tile: 8.0, depth: 0.0, layers: Vec::new(), mask: Vec::new(), edge: None, roof: None, surface: crate::floor::GROUND, shade: Vec::new(), scatter: Vec::new(), tint: None }
     }
 
     /// An island: a patch of `spacing` around `centre` (its top at `centre`'s height) shaped by `land(dx, dy)` (the land

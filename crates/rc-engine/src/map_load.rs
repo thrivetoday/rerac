@@ -139,6 +139,10 @@ pub fn patch_gameplay(root: &Path, def: &MapDef, host: &[u8]) -> Result<Vec<u8>>
         if !t.cut.is_empty() { println!("map: objects[{i}] {}: the template's links / shared words at {:?} cut", o.asset, t.cut); }
         let (from, from_yaw) = (t.instance.position, t.instance.rotation[2]);
         let mut t = t.placed(o.position, o.yaw);
+        // A tint: the record's own light colour (its ambient, 128 = 1.0) scaled by it, brightened so it shows.
+        if let Some(c) = o.tint {
+            for k in 0..3 { t.instance.color[k] = ((t.instance.color[k].max(40) as f32) * c[k] as f32 / 255.0 * 1.6).round().clamp(0.0, 255.0) as i32; }
+        }
         if AWAY.iter().any(|a| a.0 == o.asset.number) {
             let (hs, hc) = homes.entry(level).or_insert_with(|| {
                 (rc_formats::gameplay::parse_splines(source).unwrap_or_default(), rc_formats::volumes::parse_volumes(source).map(|v| v.cuboids).unwrap_or_default())
@@ -618,7 +622,36 @@ impl Plugin for MapRenderPlugin {
         if active().is_none() { return; }
         app.init_resource::<Drawn>()
             .add_systems(crate::level_switch::LevelStartup, spawn_geometry)
-            .add_systems(Update, redraw_changed.run_if(resource_exists::<crate::Level>));
+            .add_systems(Update, (redraw_changed.run_if(resource_exists::<crate::Level>), map_fog));
+    }
+}
+
+/// The game's fog (the level settings the map wrote: the sky planet's, or its own) over the map's own geometry: the
+/// game's renderers fog the objects and the sky with it; the map's terrain, paths, pieces and rails are drawn by Bevy's
+/// standard material, which takes it as a distance fog on the camera (`RC_FOG=0`: none, as the game's renderers).
+fn map_fog(mut commands: Commands, fog: Option<Res<crate::game_camera::GameFog>>, cams: Query<(Entity, Option<&DistanceFog>), With<crate::fly_cam::FlyCam>>) {
+    let own = active().and_then(|d| d.world.fog);
+    let want = fog.filter(|_| !std::env::var("RC_FOG").is_ok_and(|v| v.trim() == "0")).map(|f| {
+        let mut f = f.fog;
+        // The map's own fog as the editor has it now (live; the game's renderers take it at the next load).
+        if let Some(o) = own {
+            (f.color, f.near_dist, f.far_dist) = (o.color, o.near * 1024.0, o.far.max(o.near + 1.0) * 1024.0);
+        }
+        let amount = |i: f32| (1.0 - i / 255.0).clamp(0.0, 1.0);
+        let (near, far) = (f.near_dist / 1024.0, (f.far_dist / 1024.0).max(f.near_dist / 1024.0 + 1.0));
+        DistanceFog {
+            color: Color::srgba_u8(f.color[0], f.color[1], f.color[2], (amount(f.far_intensity).max(amount(f.near_intensity)) * 255.0) as u8),
+            falloff: FogFalloff::Linear { start: near, end: far },
+            ..default()
+        }
+    });
+    for (e, now) in &cams {
+        match (&want, now) {
+            (Some(w), Some(n)) if n.color == w.color && matches!((&n.falloff, &w.falloff), (FogFalloff::Linear { start: a, end: b }, FogFalloff::Linear { start: c, end: d }) if a == c && b == d) => {}
+            (Some(w), _) => { commands.entity(e).insert(w.clone()); }
+            (None, Some(_)) => { commands.entity(e).remove::<DistanceFog>(); }
+            (None, None) => {}
+        }
     }
 }
 
@@ -631,8 +664,16 @@ struct Drawn {
     pieces: std::collections::HashMap<rc_map::AssetId, Vec<Handle<StandardMaterial>>>,
 }
 
-/// The geometry a map draws: what a redraw compares.
-fn geometry_of(d: &MapDef) -> (&[rc_map::Floor], &[rc_map::terrain::Patch], &[rc_map::walkway::Walkway], &[rc_map::Rail]) { (&d.floors, &d.patches, &d.walkways, &d.rails) }
+/// The geometry a map draws: what a redraw compares (its light and palette too: they are baked into it).
+#[allow(clippy::type_complexity)]
+fn geometry_of(d: &MapDef) -> (&[rc_map::Floor], &[rc_map::terrain::Patch], &[rc_map::walkway::Walkway], &[rc_map::Rail], Option<rc_map::Light>, Option<rc_map::Palette>, &[rc_map::PointLight], &[(rc_map::AssetId, rc_map::Palette)]) {
+    (&d.floors, &d.patches, &d.walkways, &d.rails, d.world.light, d.world.palette, &d.world.lights, &d.world.recolour)
+}
+
+/// The palette the map's terrain and pieces are drawn with now (set by [`draw`]).
+static PALETTE: RwLock<Option<rc_map::Palette>> = RwLock::new(None);
+/// The terrain textures recoloured on their own (material groups, `World::recolour`; set by [`draw`]).
+static RECOLOUR: RwLock<Vec<(rc_map::AssetId, rc_map::Palette)>> = RwLock::new(Vec::new());
 
 /// The floors' and rails' entities (despawned with the level).
 #[derive(Component)]
@@ -642,25 +683,45 @@ struct MapGeometry;
 fn to_bevy(p: [f32; 3]) -> Vec3 { crate::tfrag_render::game_to_bevy(p) }
 
 fn texture_image(level: &crate::level_load::LoadedLevel, id: rc_map::AssetId) -> Option<Image> {
-    // The host's own tfrag textures are loaded; another level's are decoded here.
+    // The host's own tfrag textures are loaded; another level's are decoded once and kept (a recolour redraws often:
+    // the colour sliders live).
+    static DECODED: OnceLock<std::sync::Mutex<std::collections::HashMap<rc_map::AssetId, Option<Arc<rc_formats::texture::Texture>>>>> = OnceLock::new();
     let from_host = id.level == level.particles.level;
-    let decoded;
-    let textures = if from_host {
-        &level.textures
+    let t: Option<Arc<rc_formats::texture::Texture>> = if from_host {
+        level.textures.iter().find(|t| t.table == TextureTable::Tfrag && t.index == id.number as usize).map(|t| Arc::new(t.texture.clone()))
     } else {
-        let root = crate::level_load::extracted_root();
-        let (core, data) = level_core(&root, id.level).ok()?;
-        let gs = crate::disc_source::level_file(&root, id.level, "gs_ram.bin").ok()?;
-        decoded = rc_formats::texture::parse_textures(&core, &data, &gs).ok()?;
-        &decoded
+        let cache = DECODED.get_or_init(Default::default);
+        let known = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned();
+        match known {
+            Some(t) => t,
+            None => {
+                let root = crate::level_load::extracted_root();
+                let all = level_core(&root, id.level).ok().and_then(|(core, data)| {
+                    let gs = crate::disc_source::level_file(&root, id.level, "gs_ram.bin").ok()?;
+                    rc_formats::texture::parse_textures(&core, &data, &gs).ok()
+                }).unwrap_or_default();
+                let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
+                // Every terrain texture of that level at once (the next one picked is there too).
+                for t in all.iter().filter(|t| t.table == TextureTable::Tfrag) {
+                    let k = rc_map::AssetId { number: t.index as i32, ..id };
+                    c.entry(k).or_insert_with(|| Some(Arc::new(t.texture.clone())));
+                }
+                c.entry(id).or_insert(None).clone()
+            }
+        }
     };
-    let t = textures.iter().find(|t| t.table == TextureTable::Tfrag && t.index == id.number as usize).map(|t| &t.texture);
-    let Some(t) = t else {
+    let Some(t) = t.as_deref() else {
         eprintln!("map: terrain texture {id} not found: drawn plain");
         return None;
     };
-    // PS2 alpha is 0..0x80: the floor is opaque.
-    let rgba: Vec<u8> = t.rgba.chunks(4).flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+    // PS2 alpha is 0..0x80: the floor is opaque. The map's palette over it.
+    let pal = *PALETTE.read().unwrap_or_else(|e| e.into_inner());
+    let own = RECOLOUR.read().unwrap_or_else(|e| e.into_inner()).iter().find(|r| r.0 == id).map(|r| r.1);
+    let rgba: Vec<u8> = t.rgba.chunks(4).flat_map(|p| {
+        let c = pal.map_or([p[0], p[1], p[2]], |q| q.apply([p[0], p[1], p[2]]));
+        let c = own.map_or(c, |q| q.apply(c));
+        [c[0], c[1], c[2], 255]
+    }).collect();
     let mut image = Image::new(
         Extent3d { width: t.width, height: t.height, depth_or_array_layers: 1 },
         TextureDimension::D2,
@@ -721,8 +782,48 @@ fn rail_mesh(points: &[[f32; 3]]) -> Mesh {
         .with_inserted_indices(Indices::U32(indices))
 }
 
-/// The direction the terrain's baked light comes from (game axes, z up: high, from the −x, −y side).
-const SUN: [f32; 3] = [-0.42, -0.55, 0.72];
+/// The light the map's terrain is baked with now (`World::light`, set by [`draw`] before it builds the meshes): the
+/// sun's direction (game axes, towards the sun), its colour and the ambient's (1 = full), the hollows' shading.
+#[derive(Clone, Copy)]
+struct Rig {
+    sun: [f32; 3],
+    sun_colour: [f32; 3],
+    ambient: [f32; 3],
+    shade: f32,
+}
+
+static RIG: RwLock<Rig> = RwLock::new(Rig { sun: [-0.42, -0.55, 0.72], sun_colour: [0.55; 3], ambient: [0.5; 3], shade: 0.0 });
+
+/// The map's point lights the meshes are baked with now (set by [`draw`]).
+static POINTS: RwLock<Vec<rc_map::PointLight>> = RwLock::new(Vec::new());
+
+/// [`lit`] at the point `p`: plus the map's point lights reaching it (falling off evenly to nothing at their radius,
+/// stronger on the side of the face that looks at them).
+fn lit_at(n: [f32; 3], p: [f32; 3]) -> [f32; 4] {
+    let mut c = lit(n);
+    for l in POINTS.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        let d = [l.position[0] - p[0], l.position[1] - p[1], l.position[2] - p[2]];
+        let dist = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        if dist >= l.radius { continue; }
+        let facing = if dist < 1e-3 { 1.0 } else { ((n[0] * d[0] + n[1] * d[1] + n[2] * d[2]) / dist).max(0.0) * 0.5 + 0.5 };
+        let k = (1.0 - dist / l.radius) * l.intensity * facing;
+        for i in 0..3 { c[i] += l.colour[i] as f32 / 255.0 * k; }
+    }
+    c
+}
+
+/// The rig of a map's light (the default: the light the terrain always had).
+fn rig_of(l: Option<&rc_map::Light>) -> Rig {
+    let Some(l) = l else { return Rig { sun: [-0.42, -0.55, 0.72], sun_colour: [0.55; 3], ambient: [0.5; 3], shade: 0.0 } };
+    let (az, el) = (l.sun_azimuth.to_radians(), l.sun_elevation.to_radians());
+    // The colours as the default's scale: 140 → 0.55 of the sun, 128 → 0.5 of the ambient.
+    Rig {
+        sun: [az.cos() * el.cos(), az.sin() * el.cos(), el.sin()],
+        sun_colour: l.sun.map(|c| c as f32 / 255.0),
+        ambient: l.ambient.map(|c| c as f32 / 255.0),
+        shade: l.shade,
+    }
+}
 
 /// The height grid's surface at `(x, y)` (bilinear, the land mask aside) and its normal there: the light and the
 /// normals of a patch's top.
@@ -742,10 +843,41 @@ fn surface(p: &rc_map::terrain::Patch, x: f32, y: f32) -> (f32, [f32; 3]) {
     (h(x, y), [-dx / l, -dy / l, 1.0 / l])
 }
 
-/// The baked light of a face with normal `n` (game axes): ambient plus the sun on it.
-fn light(n: [f32; 3]) -> f32 {
-    let len = (SUN[0] * SUN[0] + SUN[1] * SUN[1] + SUN[2] * SUN[2]).sqrt();
-    0.5 + 0.55 * ((n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2]) / len).max(0.0)
+/// The baked light of a face with normal `n` (game axes): the rig's ambient plus its sun on it, as a colour (alpha 1).
+fn lit(n: [f32; 3]) -> [f32; 4] {
+    let r = *RIG.read().unwrap_or_else(|e| e.into_inner());
+    let len = (r.sun[0] * r.sun[0] + r.sun[1] * r.sun[1] + r.sun[2] * r.sun[2]).sqrt().max(1e-6);
+    let d = ((n[0] * r.sun[0] + n[1] * r.sun[1] + n[2] * r.sun[2]) / len).max(0.0);
+    [r.ambient[0] + r.sun_colour[0] * d, r.ambient[1] + r.sun_colour[1] * d, r.ambient[2] + r.sun_colour[2] * d, 1.0]
+}
+
+/// A light colour darkened by `k` (the cliffs, the sides).
+fn dim(c: [f32; 4], k: f32) -> [f32; 4] { [c[0] * k, c[1] * k, c[2] * k, c[3]] }
+
+/// How much light reaches the land at `(x, y)` (1 = all): hollows and the feet of slopes, lower than the land around
+/// them, darken by the rig's shade (ambient occlusion from the heights around, 1.5 and 4 units away).
+fn open_sky(p: &rc_map::terrain::Patch, x: f32, y: f32) -> f32 {
+    let shade = RIG.read().unwrap_or_else(|e| e.into_inner()).shade;
+    if shade <= 0.0 { return 1.0; }
+    let h = surface(p, x, y).0;
+    let mut above = 0.0;
+    for (r, w) in [(1.5f32, 0.6f32), (4.0, 0.4)] {
+        for k in 0..8 {
+            let a = k as f32 * std::f32::consts::FRAC_PI_4;
+            let q = surface(p, x + a.cos() * r, y + a.sin() * r).0;
+            above += ((q - h) / r).clamp(0.0, 1.0) * w / 8.0;
+        }
+    }
+    1.0 - shade * 0.7 * above.clamp(0.0, 1.0)
+}
+
+/// Triangles' colours multiplied by a tint (an island's or a path's own colour).
+#[allow(clippy::type_complexity)]
+fn tinted(mut tris: Vec<([[f32; 3]; 3], [[f32; 2]; 3], [[f32; 3]; 3], [[f32; 4]; 3])>, tint: Option<[u8; 3]>) -> Vec<([[f32; 3]; 3], [[f32; 2]; 3], [[f32; 3]; 3], [[f32; 4]; 3])> {
+    let Some(t) = tint else { return tris };
+    let k = t.map(|c| c as f32 / 255.0);
+    for tri in &mut tris { for c in &mut tri.3 { for i in 0..3 { c[i] *= k[i]; } } }
+    tris
 }
 
 /// A mesh from triangles given with their game-space corners (wound clockwise seen from their front, as the collision
@@ -780,7 +912,7 @@ fn patch_mesh(p: &rc_map::terrain::Patch) -> Mesh {
     let mut tris = Vec::new();
     for t in p.top() {
         let n = t.map(|q| surface(p, q[0], q[1]).1);
-        let c = [0, 1, 2].map(|i| { let l = light(n[i]); let s = p.shade_xy(t[i][0], t[i][1]); [l * s[0], l * s[1], l * s[2], 1.0] });
+        let c = [0, 1, 2].map(|i| { let l = dim(lit_at(n[i], t[i]), open_sky(p, t[i][0], t[i][1])); let s = p.shade_xy(t[i][0], t[i][1]); [l[0] * s[0], l[1] * s[1], l[2] * s[2], 1.0] });
         tris.push((t, t.map(uv), n, c));
     }
     if p.depth > 0.0 {
@@ -791,10 +923,9 @@ fn patch_mesh(p: &rc_map::terrain::Patch) -> Mesh {
             if len < 1e-5 { continue; }
             // Out of the land: the land is on the segment's left.
             let out = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len, 0.0];
-            let l = light(out) * 0.85;
             let (a0, b0, a1, b1) = (a, b, [a[0], a[1], bottom], [b[0], b[1], bottom]);
             let uv = |u: f32, top: f32, z: f32| [u / p.tile, (top - z) / p.tile];
-            let c = [l, l, l, 1.0];
+            let c = dim(lit(out), 0.85);
             // Seen from outside: a lower, a upper, b upper (clockwise), and a lower, b upper, b lower.
             tris.push(([a1, a0, b0], [uv(along, a[2], bottom), uv(along, a[2], a[2]), uv(along + len, b[2], b[2])], [out; 3], [c; 3]));
             tris.push(([a1, b0, b1], [uv(along, a[2], bottom), uv(along + len, b[2], b[2]), uv(along + len, b[2], bottom)], [out; 3], [c; 3]));
@@ -810,6 +941,7 @@ fn patch_mesh(p: &rc_map::terrain::Patch) -> Mesh {
             }
         }
     }
+    let tris = tinted(tris, p.tint);
     soup_mesh(&tris)
 }
 
@@ -835,11 +967,12 @@ fn layer_mesh(p: &rc_map::terrain::Patch, k: usize) -> Option<Mesh> {
             let w = t.map(|q| weight(q[0], q[1]));
             if w.iter().all(|&w| w <= 0.0) { return None; }
             let n = t.map(|q| surface(p, q[0], q[1]).1);
-            let c = [0, 1, 2].map(|i| { let l = light(n[i]); let s = p.shade_xy(t[i][0], t[i][1]); [l * s[0], l * s[1], l * s[2], w[i]] });
+            let c = [0, 1, 2].map(|i| { let l = dim(lit_at(n[i], t[i]), open_sky(p, t[i][0], t[i][1])); let s = p.shade_xy(t[i][0], t[i][1]); [l[0] * s[0], l[1] * s[1], l[2] * s[2], w[i]] });
             let lifted = t.map(|q| [q[0], q[1], q[2] + lift]);
             Some((lifted, t.map(|q| [(q[0] - p.origin[0]) / layer.tile, (q[1] - p.origin[1]) / layer.tile]), n, c))
         })
         .collect();
+    let tris = tinted(tris, p.tint);
     (!tris.is_empty()).then(|| soup_mesh(&tris))
 }
 
@@ -1129,8 +1262,7 @@ fn wall_along(segs: Vec<([f32; 3], [f32; 3])>, e: Option<&rc_map::terrain::Edge>
         along += len;
         if e.is_some_and(|e| e.open_at((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)) { continue; }
         let out = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len, 0.0];
-        let l = light(out);
-        let c = [[l, l, l, 1.0]; 3];
+        let c = [lit(out); 3];
         let (a1, b1) = ([a[0], a[1], a[2] + height], [b[0], b[1], b[2] + height]);
         let v = height / tile;
         // Seen from outside: a bottom, a top, b top; a bottom, b top, b bottom (clockwise).
@@ -1151,8 +1283,7 @@ fn walkway_mesh(w: &rc_map::walkway::Walkway) -> Mesh {
         let n = [e2[1] * e1[2] - e2[2] * e1[1], e2[2] * e1[0] - e2[0] * e1[2], e2[0] * e1[1] - e2[1] * e1[0]];
         let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
         let n = n.map(|v| v / l);
-        let li = light(n);
-        tris.push((t, t.map(uv), [n; 3], [[li, li, li, 1.0]; 3]));
+        tris.push((t, t.map(uv), [n; 3], t.map(|q| lit_at(n, q))));
         if w.depth > 0.0 {
             let b = t.map(|q| [q[0], q[1], q[2] - w.depth]);
             tris.push(([b[0], b[2], b[1]], [b[0], b[2], b[1]].map(uv), [[0.0, 0.0, -1.0]; 3], [[0.35, 0.35, 0.35, 1.0]; 3]));
@@ -1166,8 +1297,7 @@ fn walkway_mesh(w: &rc_map::walkway::Walkway) -> Mesh {
             let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
             if len < 1e-5 { continue; }
             let out = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len, 0.0];
-            let l = light(out) * 0.85;
-            let c = [[l, l, l, 1.0]; 3];
+            let c = [dim(lit(out), 0.85); 3];
             let (a1, b1) = ([a[0], a[1], a[2] - w.depth], [b[0], b[1], b[2] - w.depth]);
             let (u0, u1, v) = (along / w.tile, (along + len) / w.tile, w.depth / w.tile);
             along += len;
@@ -1175,6 +1305,7 @@ fn walkway_mesh(w: &rc_map::walkway::Walkway) -> Mesh {
             tris.push(([a1, b, b1], [[u0, v], [u1, 0.0], [u1, v]], [out; 3], c));
         }
     }
+    let tris = tinted(tris, w.tint);
     soup_mesh(&tris)
 }
 
@@ -1196,12 +1327,13 @@ fn scatter_tris(m: &PieceModel, p: &rc_map::terrain::Patch, id: rc_map::AssetId)
 /// A roof: the land's shape at its height, lit from above, its underside darker.
 fn roof_mesh(p: &rc_map::terrain::Patch, r: &rc_map::terrain::Roof) -> Mesh {
     let up = [0.0, 0.0, 1.0];
-    let l = light(up);
+    let l = lit(up);
     let tris: Vec<_> = p
         .roof_tris()
         .into_iter()
-        .flat_map(|t| both_sides((t, t.map(|q| [(q[0] - p.origin[0]) / r.tile, (q[1] - p.origin[1]) / r.tile]), [up; 3], [[l, l, l, 1.0]; 3]), 0.55))
+        .flat_map(|t| both_sides((t, t.map(|q| [(q[0] - p.origin[0]) / r.tile, (q[1] - p.origin[1]) / r.tile]), [up; 3], [l; 3]), 0.55))
         .collect();
+    let tris = tinted(tris, p.tint);
     soup_mesh(&tris)
 }
 
@@ -1235,13 +1367,19 @@ fn piece_mesh(tris: &[([[f32; 3]; 3], [[f32; 2]; 3])]) -> Mesh {
     let mut positions = Vec::with_capacity(tris.len() * 3);
     let mut uvs = Vec::with_capacity(tris.len() * 3);
     let mut normals = Vec::with_capacity(tris.len() * 3);
+    let mut colors = Vec::with_capacity(tris.len() * 3);
     for (p, uv) in tris {
         let b = p.map(to_bevy);
         let n = (b[1] - b[0]).cross(b[2] - b[0]).normalize_or(Vec3::Y);
-        for c in 0..3 {
-            positions.push(b[c].to_array());
-            uvs.push(uv[c]);
+        // The rig's light on the face (either side: the pieces are drawn both ways), never darker than its ambient.
+        let g = [n.x, -n.z, n.y];
+        for k in 0..3 {
+            let l = lit_at(g, p[k]);
+            let l2 = lit_at(g.map(|v| -v), p[k]);
+            positions.push(b[k].to_array());
+            uvs.push(uv[k]);
             normals.push(n.to_array());
+            colors.push([l[0].max(l2[0]), l[1].max(l2[1]), l[2].max(l2[2]), 1.0]);
         }
     }
     let count = positions.len() as u32;
@@ -1249,6 +1387,7 @@ fn piece_mesh(tris: &[([[f32; 3]; 3], [[f32; 2]; 3])]) -> Mesh {
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
         .with_inserted_indices(Indices::U32((0..count).collect()))
 }
 
@@ -1258,13 +1397,14 @@ fn piece_materials(m: &PieceModel, images: &mut Assets<Image>, materials: &mut A
         .iter()
         .map(|(tex, _)| {
             let image = tex.as_ref().map(|t| {
-                let rgba: Vec<u8> = t.rgba.chunks(4).flat_map(|p| [p[0], p[1], p[2], (p[3] as u16 * 2).min(255) as u8]).collect();
+                let pal = *PALETTE.read().unwrap_or_else(|e| e.into_inner());
+                let rgba: Vec<u8> = t.rgba.chunks(4).flat_map(|p| { let c = pal.map_or([p[0], p[1], p[2]], |q| q.apply([p[0], p[1], p[2]])); [c[0], c[1], c[2], (p[3] as u16 * 2).min(255) as u8] }).collect();
                 let mut img = Image::new(Extent3d { width: t.width, height: t.height, depth_or_array_layers: 1 }, TextureDimension::D2, rgba, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD);
                 img.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor { address_mode_u: ImageAddressMode::Repeat, address_mode_v: ImageAddressMode::Repeat, ..ImageSamplerDescriptor::linear() });
                 images.add(img)
             });
             materials.add(StandardMaterial {
-                base_color: if image.is_some() { Color::srgb(0.9, 0.9, 0.9) } else { Color::srgb(0.6, 0.6, 0.62) },
+                base_color: if image.is_some() { Color::WHITE } else { Color::srgb(0.6, 0.6, 0.62) },
                 base_color_texture: image,
                 unlit: true,
                 alpha_mode: AlphaMode::Mask(0.4),
@@ -1325,6 +1465,16 @@ fn draw(
     images: &mut Assets<Image>,
     materials: &mut Assets<StandardMaterial>,
 ) {
+    // The map's light and palette for the meshes and textures built below; a palette change makes the textures again.
+    *RIG.write().unwrap_or_else(|e| e.into_inner()) = rig_of(def.world.light.as_ref());
+    *POINTS.write().unwrap_or_else(|e| e.into_inner()) = def.world.lights.clone();
+    let pal = def.world.palette.filter(|p| *p != rc_map::Palette::default());
+    if *PALETTE.read().unwrap_or_else(|e| e.into_inner()) != pal || *RECOLOUR.read().unwrap_or_else(|e| e.into_inner()) != def.world.recolour {
+        *PALETTE.write().unwrap_or_else(|e| e.into_inner()) = pal;
+        *RECOLOUR.write().unwrap_or_else(|e| e.into_inner()) = def.world.recolour.clone();
+        drawn.textures.clear();
+        drawn.pieces.clear();
+    }
     // A texture's material (plain colour without one); `blend`: drawn over what is under it by its vertex alpha.
     let mut material = |texture: Option<rc_map::AssetId>, plain: Color, blend: bool| {
         let image = texture.and_then(|id| drawn.textures.entry(id).or_insert_with(|| texture_image(lv, id).map(|i| images.add(i))).clone());

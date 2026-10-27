@@ -47,11 +47,13 @@ pub struct Walkway {
     /// Built only where it is off the land: where the islands' ground comes up to its top it stops (a bridge from
     /// coast to coast). See [`Walkway::pieces`].
     pub cut: bool,
+    /// Its colour tinted (multiplies its light: this path only).
+    pub tint: Option<[u8; 3]>,
 }
 
 impl Walkway {
     pub fn new(points: Vec<[f32; 3]>, width: f32) -> Walkway {
-        Walkway { points, width, depth: 1.0, texture: None, tile: 4.0, surface: crate::floor::GROUND, edge: None, cut: false }
+        Walkway { points, width, depth: 1.0, texture: None, tile: 4.0, surface: crate::floor::GROUND, edge: None, cut: false, tint: None }
     }
 
     /// What is built of it: itself, or with `cut` the stretches of its centre line where the land (`land(x, y)`: the

@@ -192,6 +192,7 @@ pub(crate) fn spawn_stars(
     materials: &mut Assets<SkyStarMaterial>,
     buffers: &mut Assets<ShaderBuffer>,
 ) -> Option<StarSim> {
+    if ls.no_stars { return None; }
     let info = level_stars(ls.level)?;
     if std::env::var("RC_SKY_STARS").is_ok_and(|v| v.trim() == "0") {
         println!("sky stars: RC_SKY_STARS=0, not generated or drawn (the rand stream then differs from the game's)");
